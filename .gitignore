@@ -1,0 +1,20 @@
+node_modules/
+dist/
+release/
+coverage/
+*.log
+*.db
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.*
+.env.local
+.DS_Store
+.vscode/
+# Prevent stray tsc-compiled config files
+vite.config.js
+# Prevent stray tsc output in src/ (should always go to dist/)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts

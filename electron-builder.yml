@@ -1,0 +1,48 @@
+appId: com.ainote.desktop
+productName: AiNote
+copyright: Copyright © 2026 AiNote
+directories:
+  buildResources: resources
+  output: release
+
+files:
+  - dist/**/*
+  - node_modules/**/*
+  - package.json
+
+extraMetadata:
+  main: dist/main/index.js
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: resources
+
+publish:
+  provider: github
+  owner: your-org
+  repo: ainote-desktop
