@@ -13,7 +13,7 @@ pnpm dev
 ## Production Build
 ```bash
 # First rebuild native modules for Electron
-pnpm rebuild
+pnpm run rebuild
 
 # Build & package
 pnpm build:electron

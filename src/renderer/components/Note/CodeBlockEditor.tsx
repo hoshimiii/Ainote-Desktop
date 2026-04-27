@@ -74,14 +74,7 @@ export function CodeBlockEditor({ block, onChange, onDelete }: CodeBlockEditorPr
   }
 
   return (
-    <div className="group relative">
-      <div className="absolute -left-8 top-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button className="p-0.5 rounded hover:bg-surface-container-high" onClick={onDelete}>
-          <span className="material-symbols-outlined text-xs text-on-surface-variant">close</span>
-        </button>
-      </div>
-
-      <div className="rounded-xl bg-surface-container-high overflow-hidden">
+    <div className="group relative rounded-xl bg-surface-container-high overflow-hidden border border-transparent hover:border-outline-variant/50">
         {/* Header: language selector + run */}
         <div className="flex items-center justify-between px-3 py-1.5 bg-surface-container-highest">
           <select
@@ -93,18 +86,27 @@ export function CodeBlockEditor({ block, onChange, onDelete }: CodeBlockEditorPr
               <option key={lang} value={lang}>{lang}</option>
             ))}
           </select>
-          <button
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-50"
-            onClick={handleRun}
-            disabled={running}
-          >
-            {running ? (
-              <span className="animate-spin material-symbols-outlined text-xs">progress_activity</span>
-            ) : (
-              <span className="material-symbols-outlined text-xs">play_arrow</span>
-            )}
-            {running ? '运行中...' : '运行'}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className="p-1 rounded-md text-on-surface-variant hover:bg-surface-container-high transition-colors"
+              onClick={onDelete}
+              title="删除代码块"
+            >
+              <span className="material-symbols-outlined text-xs">close</span>
+            </button>
+            <button
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-xs text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-50"
+              onClick={handleRun}
+              disabled={running}
+            >
+              {running ? (
+                <span className="animate-spin material-symbols-outlined text-xs">progress_activity</span>
+              ) : (
+                <span className="material-symbols-outlined text-xs">play_arrow</span>
+              )}
+              {running ? '运行中...' : '运行'}
+            </button>
+          </div>
         </div>
 
         {/* Code textarea */}
@@ -140,7 +142,6 @@ export function CodeBlockEditor({ block, onChange, onDelete }: CodeBlockEditorPr
             </pre>
           </div>
         )}
-      </div>
     </div>
   )
 }

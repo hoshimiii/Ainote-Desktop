@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { attachSqlitePersist } from './sqlitePersist'
-import { pickPersistedKanbanState, restorePersistedKanbanState } from '@shared/kanbanPersistence'
+import { orderOwnedIds } from '@shared/orderedIds'
+import { pickPersistedKanbanState, restorePersistedKanbanStateWithRecovery } from '@shared/kanbanPersistence'
 import type {
   WorkSpace,
   Mission,
@@ -198,16 +199,33 @@ export const useKanbanStore = create<KanbanStore>()(
       createMission: (mission) => {
         set((s) => {
           const wsId = s.activeWorkSpaceId
-          const prevOrder = wsId ? (s.missionOrder[wsId] ?? []) : []
+          let nextOwnedMissionIds: string[] | null = null
+          const nextWorkspaces = wsId
+            ? s.workspaces.map((workspace) => {
+              if (workspace.id !== wsId) return workspace
+              nextOwnedMissionIds = workspace.missionIds.includes(mission.id)
+                ? workspace.missionIds
+                : [...workspace.missionIds, mission.id]
+              return {
+                ...workspace,
+                missionIds: nextOwnedMissionIds,
+              }
+            })
+            : s.workspaces
+          const nextMissionOrder = wsId && nextOwnedMissionIds
+            ? {
+                ...s.missionOrder,
+                [wsId]: orderOwnedIds(nextOwnedMissionIds, [...(s.missionOrder[wsId] ?? []), mission.id]),
+              }
+            : s.missionOrder
           return {
+            workspaces: nextWorkspaces,
             missions: { ...s.missions, [mission.id]: mission },
             currentMissionId: mission.id,
             currentNoteId: null,
             currentBoardId: null,
             previewMissionId: null,
-            missionOrder: wsId
-              ? { ...s.missionOrder, [wsId]: [...prevOrder, mission.id] }
-              : s.missionOrder,
+            missionOrder: nextMissionOrder,
           }
         })
       },
@@ -223,11 +241,27 @@ export const useKanbanStore = create<KanbanStore>()(
       deleteMission: (id) => {
         set((s) => {
           const { [id]: _, ...restMissions } = s.missions
+          const nextWorkspaces = s.workspaces.map((workspace) => {
+            const nextOwnedMissionIds = workspace.missionIds.filter((missionId) => missionId !== id)
+            return {
+              ...workspace,
+              missionIds: nextOwnedMissionIds,
+            }
+          })
+          const nextMissionOrder = Object.fromEntries(
+            nextWorkspaces.map((workspace) => [
+              workspace.id,
+              orderOwnedIds(workspace.missionIds.filter((missionId) => restMissions[missionId]), s.missionOrder[workspace.id] ?? []),
+            ]),
+          )
           return {
+            workspaces: nextWorkspaces,
             missions: restMissions,
+            currentBoardId: s.currentMissionId === id ? null : s.currentBoardId,
             currentMissionId: s.currentMissionId === id ? null : s.currentMissionId,
             currentNoteId: s.currentMissionId === id ? null : s.currentNoteId,
             previewMissionId: s.previewMissionId === id ? null : s.previewMissionId,
+            missionOrder: nextMissionOrder,
           }
         })
       },
@@ -237,9 +271,15 @@ export const useKanbanStore = create<KanbanStore>()(
         }))
       },
       reorderMissions: (workspaceId, orderedIds) => {
-        set((s) => ({
-          missionOrder: { ...s.missionOrder, [workspaceId]: orderedIds },
-        }))
+        set((s) => {
+          const workspace = s.workspaces.find((item) => item.id === workspaceId)
+          if (!workspace) return s
+          const ownedMissionIds = workspace.missionIds.filter((id) => s.missions[id])
+          const normalizedOrder = orderOwnedIds(ownedMissionIds, orderedIds)
+          return {
+            missionOrder: { ...s.missionOrder, [workspaceId]: normalizedOrder },
+          }
+        })
       },
 
       // --- Board ---
@@ -567,12 +607,15 @@ attachSqlitePersist(useKanbanStore, {
   name: 'kanban',
   debounceMs: 500,
   serialize: (state) => pickPersistedKanbanState(state),
-  restore: (persisted) => ({
-    ...(restorePersistedKanbanState(persisted) as Partial<KanbanStore>),
-    rehydrationError: null,
-    transientRecoveryActive: false,
-    transientRecoveryMessage: null,
-  }),
+  restore: (persisted) => {
+    const restored = restorePersistedKanbanStateWithRecovery(persisted)
+    return {
+      ...(restored.state as Partial<KanbanStore>),
+      rehydrationError: null,
+      transientRecoveryActive: false,
+      transientRecoveryMessage: restored.transientRecoveryMessage,
+    }
+  },
   shouldPersist: (state) => !state.transientRecoveryActive,
   onError: (store, error, phase) => {
     const message = error instanceof Error ? error.message : String(error)

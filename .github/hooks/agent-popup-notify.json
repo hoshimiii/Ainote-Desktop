@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "echo Hook only enabled on Windows",
+        "windows": "powershell -NoProfile -ExecutionPolicy Bypass -File .github/hooks/scripts/agent-popup.ps1 -Event PreToolUse",
+        "timeout": 600
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "echo Hook only enabled on Windows",
+        "windows": "powershell -NoProfile -ExecutionPolicy Bypass -File .github/hooks/scripts/agent-popup.ps1 -Event Stop",
+        "timeout": 600
+      }
+    ]
+  }
+}

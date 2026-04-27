@@ -37,49 +37,51 @@ export function WindowTitlebar({ onBack, breadcrumb, actions }: WindowTitlebarPr
   const handleClose = () => window.electronAPI.app.close()
 
   return (
-    <div className="h-8 flex items-center justify-between bg-surface-container border-b border-outline-variant titlebar-drag select-none flex-shrink-0">
-      {/* Left: breadcrumb area */}
-      <div className="flex items-center gap-1 px-2 titlebar-no-drag">
-        {onBack && (
-          <button
-            className="p-1 rounded hover:bg-surface-container-high"
-            onClick={onBack}
-          >
-            <span className="material-symbols-outlined text-sm text-on-surface-variant">arrow_back</span>
-          </button>
-        )}
-        <span className="text-xs text-on-surface-variant truncate max-w-[200px]">
-          {breadcrumb ?? 'AiNote'}
-        </span>
-      </div>
-
-      {/* Center: action buttons */}
-      <div className="flex items-center gap-1 titlebar-no-drag">
-        {actions}
-      </div>
-
-      {/* Right: window controls */}
-      <div className="flex items-center titlebar-no-drag">
-        <button
-          className="w-11 h-8 flex items-center justify-center hover:bg-surface-container-high transition-colors"
-          onClick={handleMinimize}
-        >
-          <span className="material-symbols-outlined text-sm text-on-surface-variant">minimize</span>
-        </button>
-        <button
-          className="w-11 h-8 flex items-center justify-center hover:bg-surface-container-high transition-colors"
-          onClick={handleMaximize}
-        >
-          <span className="material-symbols-outlined text-sm text-on-surface-variant">
-            {maximized ? 'filter_none' : 'crop_square'}
+    <div className="h-10 bg-surface-container/95 border-b border-outline-variant titlebar-drag select-none flex-shrink-0 backdrop-blur-sm">
+      <div className="app-chrome-shell grid h-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
+        {/* Left: breadcrumb area */}
+        <div className="flex min-w-0 items-center gap-1 titlebar-no-drag">
+          {onBack && (
+            <button
+              className="p-1 rounded-md hover:bg-surface-container-high"
+              onClick={onBack}
+            >
+              <span className="material-symbols-outlined text-sm text-on-surface-variant">arrow_back</span>
+            </button>
+          )}
+          <span className="text-xs text-on-surface-variant truncate">
+            {breadcrumb ?? 'AiNote'}
           </span>
-        </button>
-        <button
-          className="w-11 h-8 flex items-center justify-center hover:bg-error/20 transition-colors"
-          onClick={handleClose}
-        >
-          <span className="material-symbols-outlined text-sm text-on-surface-variant">close</span>
-        </button>
+        </div>
+
+        {/* Center: action buttons */}
+        <div className="flex items-center justify-self-center gap-1 titlebar-no-drag">
+          {actions}
+        </div>
+
+        {/* Right: window controls */}
+        <div className="flex items-center justify-self-end titlebar-no-drag">
+          <button
+            className="w-10 h-8 flex items-center justify-center rounded-md hover:bg-surface-container-high transition-colors"
+            onClick={handleMinimize}
+          >
+            <span className="material-symbols-outlined text-sm text-on-surface-variant">minimize</span>
+          </button>
+          <button
+            className="w-10 h-8 flex items-center justify-center rounded-md hover:bg-surface-container-high transition-colors"
+            onClick={handleMaximize}
+          >
+            <span className="material-symbols-outlined text-sm text-on-surface-variant">
+              {maximized ? 'filter_none' : 'crop_square'}
+            </span>
+          </button>
+          <button
+            className="w-10 h-8 flex items-center justify-center rounded-md hover:bg-error/20 transition-colors"
+            onClick={handleClose}
+          >
+            <span className="material-symbols-outlined text-sm text-on-surface-variant">close</span>
+          </button>
+        </div>
       </div>
     </div>
   )

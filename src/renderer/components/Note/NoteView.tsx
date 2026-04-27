@@ -10,6 +10,7 @@ import type { Block } from '@shared/types'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { SortableItem, DragHandle } from '../dnd/SortableItem'
 import { useState } from 'react'
+import { cn } from '../ui'
 
 export function NoteView() {
   const currentMissionId = useKanbanStore((s) => s.currentMissionId)
@@ -48,38 +49,47 @@ export function NoteView() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Note header */}
-      <div className="flex items-center gap-2 p-4 border-b border-outline-variant">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setActiveNote(currentMissionId, null)}
-        >
-          <span className="material-symbols-outlined text-sm">arrow_back</span>
-        </Button>
-        <h2 className="flex-1 text-lg font-semibold text-on-surface truncate">
-          {note.title || '无标题'}
-        </h2>
-        <RenameDialog
-          initialName={note.title}
-          onConfirm={(newName) => renameNote(currentMissionId, currentNoteId, newName)}
-        />
-        <DeleteDialog
-          title="删除笔记"
-          description={`确定删除 "${note.title}" 吗？`}
-          onConfirm={() => {
-            deleteNote(currentMissionId, currentNoteId)
-          }}
-        />
+      <div className="border-b border-outline-variant bg-surface-container-low/80 backdrop-blur-sm">
+        <div className="page-chrome-shell flex items-center gap-3 py-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="flex-shrink-0 rounded-xl"
+            onClick={() => setActiveNote(currentMissionId, null)}
+          >
+            <span className="material-symbols-outlined text-sm">arrow_back</span>
+          </Button>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-on-surface-variant/80">Note</p>
+            <h2 className="mt-1 text-xl font-semibold font-display text-on-surface truncate">
+              {note.title || '无标题'}
+            </h2>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <RenameDialog
+              initialName={note.title}
+              onConfirm={(newName) => renameNote(currentMissionId, currentNoteId, newName)}
+            />
+            <DeleteDialog
+              title="删除笔记"
+              description={`确定删除 "${note.title}" 吗？`}
+              onConfirm={() => {
+                deleteNote(currentMissionId, currentNoteId)
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Block editor */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-[65ch] mx-auto space-y-4">
+      <div className="flex-1 overflow-y-auto">
+        <div className="note-content-shell py-8 space-y-4">
           {/* Insert handle before first block */}
           <InsertBlockHandle onInsert={(type) => insertBlock(currentNoteId, -1, type)} />
 
           <SortableContext items={note.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
               {note.blocks.map((block, index) => {
+                const isSelected = selectedBlockId === block.id
                 const hasLink = !!(block.linkedBoardId || block.linkedTaskId)
                 const linkLabel = block.linkedTaskId
                   ? tasks[block.linkedTaskId]?.title
@@ -89,9 +99,20 @@ export function NoteView() {
 
                 return (
                   <SortableItem key={block.id} id={block.id} data={{ type: 'block' }} dragHandle>
-                    <div className="relative group/block">
+                    <div
+                      className={cn(
+                        'relative group/block rounded-2xl transition-all',
+                        isSelected && 'bg-surface-container-low/70 shadow-[inset_0_0_0_1px_rgba(114,125,128,0.16)]',
+                      )}
+                      onPointerDownCapture={() => setSelectedBlockId(block.id)}
+                    >
                       {/* Drag handle + link indicator */}
-                      <div className="absolute -left-8 top-1 flex flex-col gap-0.5 opacity-0 group-hover/block:opacity-100 transition-opacity">
+                      <div
+                        className={cn(
+                          'absolute -left-10 top-3 z-10 flex flex-col gap-1 rounded-xl bg-surface-container-low/95 p-1 shadow-sm ring-1 ring-outline-variant/50 transition-opacity',
+                          isSelected ? 'opacity-100' : 'opacity-0 group-hover/block:opacity-100 group-focus-within/block:opacity-100',
+                        )}
+                      >
                         <DragHandle className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-surface-container-high">
                           <span className="material-symbols-outlined text-xs text-on-surface-variant">drag_indicator</span>
                         </DragHandle>

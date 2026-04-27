@@ -18,6 +18,7 @@ import {
   type DragOverEvent,
 } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
+import { orderOwnedIds } from '@shared/orderedIds'
 
 export type DndItemType = 'mission' | 'board' | 'board-card' | 'task' | 'subtask' | 'note' | 'block'
 
@@ -106,8 +107,9 @@ export function WorkPage() {
 
     switch (type) {
       case 'mission': {
-        if (!activeWorkSpaceId) break
-        const ids = missionOrder[activeWorkSpaceId] ?? Object.keys(missions)
+        if (!activeWorkSpaceId || !workspace) break
+        const ownedMissionIds = workspace.missionIds.filter((id) => missions[id])
+        const ids = orderOwnedIds(ownedMissionIds, missionOrder[activeWorkSpaceId] ?? [])
         const oldIdx = ids.indexOf(activeIdStr)
         const newIdx = ids.indexOf(overIdStr)
         if (oldIdx !== -1 && newIdx !== -1) {

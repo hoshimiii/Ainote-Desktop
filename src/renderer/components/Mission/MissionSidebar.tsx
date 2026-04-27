@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useKanbanStore } from '../../store'
+import { orderOwnedIds } from '@shared/orderedIds'
 import { CreateDialog } from '../items/CreateDialog'
 import { DeleteDialog } from '../items/DeleteDialog'
 import { RenameDialog } from '../items/RenameDialog'
@@ -9,6 +10,7 @@ import { SortableItem } from '../dnd/SortableItem'
 
 export function MissionSidebar() {
   const activeWorkSpaceId = useKanbanStore((s) => s.activeWorkSpaceId)
+  const workspace = useKanbanStore((s) => s.workspaces.find((w) => w.id === activeWorkSpaceId))
   const missions = useKanbanStore((s) => s.missions)
   const missionOrder = useKanbanStore((s) => s.missionOrder)
   const currentMissionId = useKanbanStore((s) => s.currentMissionId)
@@ -24,14 +26,11 @@ export function MissionSidebar() {
   const [ctxRenameId, setCtxRenameId] = useState<string | null>(null)
   const [ctxDeleteId, setCtxDeleteId] = useState<string | null>(null)
 
-  if (!activeWorkSpaceId) return null
+  if (!activeWorkSpaceId || !workspace) return null
 
   // Get ordered mission list
-  const orderedIds = missionOrder[activeWorkSpaceId] ?? []
-  const allMissionIds = Object.keys(missions).filter(
-    (id) => !orderedIds.includes(id),
-  )
-  const displayIds = [...orderedIds, ...allMissionIds].filter((id) => missions[id])
+  const ownedMissionIds = workspace.missionIds.filter((id) => missions[id])
+  const displayIds = orderOwnedIds(ownedMissionIds, missionOrder[activeWorkSpaceId] ?? [])
 
   return (
     <div className="flex flex-col h-full">

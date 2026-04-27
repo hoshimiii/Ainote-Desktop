@@ -341,7 +341,7 @@ export function executeFormalKanbanCommand(
       return ok(command.kind, snapshot, { noteId: command.noteId }, ["笔记内容已重写"]);
     }
     default:
-      return fail(command.kind, "Unsupported command");
+      return fail(command, "Unsupported command");
   }
 }
 

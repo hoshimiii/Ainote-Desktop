@@ -1,3 +1,4 @@
+import { orderOwnedIds } from './orderedIds'
 import type { Board, Mission, Note, Task, WorkSpace } from './types'
 
 export type PersistedCenterTab = 'notes' | 'boards'
@@ -54,6 +55,13 @@ const DEFAULT_STATE: KanbanPersistedState = {
   notes: {},
   missionOrder: {},
   boardOrder: {},
+}
+
+export interface PersistedKanbanRestoreResult {
+  state: KanbanPersistedState
+  transientRecoveryMessage: string | null
+  recoveredOrphanMissionIds: string[]
+  unresolvedOrphanMissionIds: string[]
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -172,10 +180,15 @@ function normalizeEntityRecord<T>(
   return Object.fromEntries(entries)
 }
 
-function normalizeOrder(ids: string[], preferredOrder: string[]): string[] {
-  const ordered = preferredOrder.filter((id) => ids.includes(id))
-  const missing = ids.filter((id) => !ordered.includes(id))
-  return [...ordered, ...missing]
+function buildMissionRecoveryMessage(recoveredCount: number, unresolvedCount: number): string | null {
+  if (unresolvedCount === 0) return null
+
+  const parts: string[] = []
+  if (recoveredCount > 0) {
+    parts.push(`已恢复 ${recoveredCount} 个可识别归属的任务区`)
+  }
+  parts.push(`${unresolvedCount} 个任务区因无法确定工作区归属已暂时隐藏`)
+  return `本地工作区数据存在历史任务区归属异常：${parts.join('；')}。`
 }
 
 export function pickPersistedKanbanState(state: KanbanPersistedState): KanbanPersistedState {
@@ -198,9 +211,14 @@ export function pickPersistedKanbanState(state: KanbanPersistedState): KanbanPer
   }
 }
 
-export function normalizePersistedKanbanState(persisted: unknown): KanbanPersistedState {
+export function restorePersistedKanbanStateWithRecovery(persisted: unknown): PersistedKanbanRestoreResult {
   if (!isObject(persisted)) {
-    return { ...DEFAULT_STATE }
+    return {
+      state: { ...DEFAULT_STATE },
+      transientRecoveryMessage: null,
+      recoveredOrphanMissionIds: [],
+      unresolvedOrphanMissionIds: [],
+    }
   }
 
   const workspaces = Array.isArray(persisted.workspaces)
@@ -216,10 +234,14 @@ export function normalizePersistedKanbanState(persisted: unknown): KanbanPersist
   const taskIds = new Set(Object.keys(tasks))
   const noteIds = new Set(Object.keys(normalizedNotes))
 
-  const normalizedWorkspaces = workspaces.map((workspace) => ({
+  let normalizedWorkspaces = workspaces.map((workspace) => ({
     ...workspace,
     missionIds: workspace.missionIds.filter((id) => missionIds.has(id)),
   }))
+
+  const recoveredOrphanMissionIds: string[] = []
+  const unresolvedOrphanMissionIds: string[] = []
+  const ownedMissionIds = new Set(normalizedWorkspaces.flatMap((workspace) => workspace.missionIds))
 
   const normalizedMissions = Object.fromEntries(
     Object.entries(missions).map(([id, mission]) => [
@@ -245,17 +267,39 @@ export function normalizePersistedKanbanState(persisted: unknown): KanbanPersist
   const missionOrderInput = normalizeRecordOfStringArrays(persisted.missionOrder)
   const boardOrderInput = normalizeRecordOfStringArrays(persisted.boardOrder)
 
+  for (const missionId of Object.keys(normalizedMissions)) {
+    if (ownedMissionIds.has(missionId)) continue
+
+    const candidateWorkspaceIds = normalizedWorkspaces
+      .filter((workspace) => (missionOrderInput[workspace.id] ?? []).includes(missionId))
+      .map((workspace) => workspace.id)
+
+    if (candidateWorkspaceIds.length === 1) {
+      const recoveredWorkspaceId = candidateWorkspaceIds[0]
+      normalizedWorkspaces = normalizedWorkspaces.map((workspace) => (
+        workspace.id === recoveredWorkspaceId
+          ? { ...workspace, missionIds: [...workspace.missionIds, missionId] }
+          : workspace
+      ))
+      ownedMissionIds.add(missionId)
+      recoveredOrphanMissionIds.push(missionId)
+      continue
+    }
+
+    unresolvedOrphanMissionIds.push(missionId)
+  }
+
   const missionOrder = Object.fromEntries(
     normalizedWorkspaces.map((workspace) => [
       workspace.id,
-      normalizeOrder(workspace.missionIds, missionOrderInput[workspace.id] ?? []),
+      orderOwnedIds(workspace.missionIds, missionOrderInput[workspace.id] ?? []),
     ]),
   ) as Record<string, string[]>
 
   const boardOrder = Object.fromEntries(
     Object.values(normalizedMissions).map((mission) => [
       mission.id,
-      normalizeOrder(mission.boardIds, boardOrderInput[mission.id] ?? []),
+      orderOwnedIds(mission.boardIds, boardOrderInput[mission.id] ?? []),
     ]),
   ) as Record<string, string[]>
 
@@ -310,22 +354,34 @@ export function normalizePersistedKanbanState(persisted: unknown): KanbanPersist
   const centerTab = persisted.centerTab === 'notes' ? 'notes' : 'boards'
 
   return {
-    workspaces: normalizedWorkspaces,
-    activeWorkSpaceId,
-    currentMissionId,
-    currentNoteId,
-    currentBoardId,
-    centerTab,
-    previewMissionId,
-    missionPanelCollapsed: !!persisted.missionPanelCollapsed,
-    listPanelCollapsed: !!persisted.listPanelCollapsed,
-    missions: normalizedMissions,
-    boards: normalizedBoards,
-    tasks,
-    notes: normalizedNotes,
-    missionOrder,
-    boardOrder,
+    state: {
+      workspaces: normalizedWorkspaces,
+      activeWorkSpaceId,
+      currentMissionId,
+      currentNoteId,
+      currentBoardId,
+      centerTab,
+      previewMissionId,
+      missionPanelCollapsed: !!persisted.missionPanelCollapsed,
+      listPanelCollapsed: !!persisted.listPanelCollapsed,
+      missions: normalizedMissions,
+      boards: normalizedBoards,
+      tasks,
+      notes: normalizedNotes,
+      missionOrder,
+      boardOrder,
+    },
+    transientRecoveryMessage: buildMissionRecoveryMessage(
+      recoveredOrphanMissionIds.length,
+      unresolvedOrphanMissionIds.length,
+    ),
+    recoveredOrphanMissionIds,
+    unresolvedOrphanMissionIds,
   }
+}
+
+export function normalizePersistedKanbanState(persisted: unknown): KanbanPersistedState {
+  return restorePersistedKanbanStateWithRecovery(persisted).state
 }
 
 export function restorePersistedKanbanState(persisted: unknown): Partial<KanbanPersistedState> {
