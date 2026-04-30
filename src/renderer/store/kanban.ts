@@ -52,6 +52,7 @@ export interface KanbanStore {
   activeWorkSpaceId: string | null
   currentMissionId: string | null
   currentNoteId: string | null
+  activeNoteTargetBlockId: string | null
   currentBoardId: string | null
   centerTab: CenterTab
   previewMissionId: string | null
@@ -119,10 +120,11 @@ export interface KanbanStore {
   // --- Navigation ---
   setCenterTab: (tab: CenterTab) => void
   setActiveBoard: (boardId: string | null) => void
+  clearActiveNoteTargetBlock: () => void
 
   // --- Note ---
   createNote: (missionId: string, note: Note) => void
-  setActiveNote: (missionId: string, noteId: string | null) => void
+  setActiveNote: (missionId: string, noteId: string | null, blockId?: string | null) => void
   deleteNote: (missionId: string, noteId: string) => void
   renameNote: (missionId: string, noteId: string, newTitle: string) => void
   updateNoteBlocks: (noteId: string, blocks: Block[]) => void
@@ -149,6 +151,7 @@ export const useKanbanStore = create<KanbanStore>()(
       activeWorkSpaceId: null,
       currentMissionId: null,
       currentNoteId: null,
+      activeNoteTargetBlockId: null,
       currentBoardId: null,
       centerTab: 'boards' as CenterTab,
       previewMissionId: null,
@@ -176,6 +179,7 @@ export const useKanbanStore = create<KanbanStore>()(
           activeWorkSpaceId: id,
           currentMissionId: null,
           currentNoteId: null,
+          activeNoteTargetBlockId: null,
           currentBoardId: null,
           previewMissionId: null,
         })
@@ -184,6 +188,7 @@ export const useKanbanStore = create<KanbanStore>()(
         set((s) => ({
           workspaces: s.workspaces.filter((w) => w.id !== id),
           activeWorkSpaceId: s.activeWorkSpaceId === id ? null : s.activeWorkSpaceId,
+          activeNoteTargetBlockId: s.activeWorkSpaceId === id ? null : s.activeNoteTargetBlockId,
           missionOrder: Object.fromEntries(
             Object.entries(s.missionOrder).filter(([k]) => k !== id),
           ),
@@ -223,6 +228,7 @@ export const useKanbanStore = create<KanbanStore>()(
             missions: { ...s.missions, [mission.id]: mission },
             currentMissionId: mission.id,
             currentNoteId: null,
+            activeNoteTargetBlockId: null,
             currentBoardId: null,
             previewMissionId: null,
             missionOrder: nextMissionOrder,
@@ -230,7 +236,7 @@ export const useKanbanStore = create<KanbanStore>()(
         })
       },
       setMission: (id) => {
-        set({ currentMissionId: id, currentNoteId: null, currentBoardId: null, previewMissionId: null })
+        set({ currentMissionId: id, currentNoteId: null, activeNoteTargetBlockId: null, currentBoardId: null, previewMissionId: null })
       },
       setPreviewMission: (id) => {
         set({ previewMissionId: id })
@@ -260,6 +266,7 @@ export const useKanbanStore = create<KanbanStore>()(
             currentBoardId: s.currentMissionId === id ? null : s.currentBoardId,
             currentMissionId: s.currentMissionId === id ? null : s.currentMissionId,
             currentNoteId: s.currentMissionId === id ? null : s.currentNoteId,
+            activeNoteTargetBlockId: s.currentMissionId === id ? null : s.activeNoteTargetBlockId,
             previewMissionId: s.previewMissionId === id ? null : s.previewMissionId,
             missionOrder: nextMissionOrder,
           }
@@ -448,12 +455,14 @@ export const useKanbanStore = create<KanbanStore>()(
       applyLoadedSnapshot: (snapshot) => {
         set({
           ...snapshot,
+          activeNoteTargetBlockId: null,
           rehydrationError: null,
         })
       },
       applyTransientRecovery: (snapshot, message) => {
         set({
           ...snapshot,
+          activeNoteTargetBlockId: null,
           rehydrationError: null,
           transientRecoveryActive: true,
           transientRecoveryMessage: message,
@@ -468,7 +477,10 @@ export const useKanbanStore = create<KanbanStore>()(
         set({ centerTab: tab })
       },
       setActiveBoard: (boardId) => {
-        set({ currentBoardId: boardId, currentNoteId: null })
+        set({ currentBoardId: boardId, currentNoteId: null, activeNoteTargetBlockId: null })
+      },
+      clearActiveNoteTargetBlock: () => {
+        set({ activeNoteTargetBlockId: null })
       },
 
       // --- Note ---
@@ -484,10 +496,11 @@ export const useKanbanStore = create<KanbanStore>()(
           },
         }))
       },
-      setActiveNote: (missionId, noteId) => {
+      setActiveNote: (missionId, noteId, blockId) => {
         set({
           currentMissionId: missionId,
           currentNoteId: noteId,
+          activeNoteTargetBlockId: noteId ? (blockId ?? null) : null,
           currentBoardId: null,
           previewMissionId: null,
         })
@@ -505,6 +518,7 @@ export const useKanbanStore = create<KanbanStore>()(
               },
             },
             currentNoteId: s.currentNoteId === noteId ? null : s.currentNoteId,
+            activeNoteTargetBlockId: s.currentNoteId === noteId ? null : s.activeNoteTargetBlockId,
           }
         })
       },

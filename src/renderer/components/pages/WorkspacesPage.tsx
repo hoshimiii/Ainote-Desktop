@@ -18,8 +18,6 @@ export function WorkspacesPage() {
   const renameWorkSpace = useKanbanStore((s) => s.renameWorkSpace)
   const rehydrationError = useKanbanStore((s) => s.rehydrationError)
   const clearRehydrationError = useKanbanStore((s) => s.clearRehydrationError)
-  const transientRecoveryMessage = useKanbanStore((s) => s.transientRecoveryMessage)
-  const dismissTransientRecovery = useKanbanStore((s) => s.dismissTransientRecovery)
   const logout = useAuthStore((s) => s.logout)
   const user = useAuthStore((s) => s.user)
   const cloudConnected = useAuthStore((s) => s.cloudConnected)
@@ -43,21 +41,6 @@ export function WorkspacesPage() {
                 onClick={clearRehydrationError}
               >
                 关闭
-              </button>
-            </div>
-          )}
-
-          {transientRecoveryMessage && (
-            <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-800">
-              <div>
-                <p className="text-sm font-semibold">云端数据已按临时模式恢复</p>
-                <p className="mt-1 text-xs leading-5">{transientRecoveryMessage}</p>
-              </div>
-              <button
-                className="flex-shrink-0 rounded-lg px-2 py-1 text-xs text-amber-800 hover:bg-amber-500/10"
-                onClick={dismissTransientRecovery}
-              >
-                知道了
               </button>
             </div>
           )}

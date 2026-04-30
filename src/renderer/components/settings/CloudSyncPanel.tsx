@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useAuthStore } from '../../store'
+import React, { useState, useEffect } from 'react'
+import { useAuthStore, useKanbanStore } from '../../store'
 import { Button } from '../ui'
 
 interface CloudSyncPanelProps {
@@ -12,6 +12,8 @@ export function CloudSyncPanel({ open, onClose }: CloudSyncPanelProps) {
   const cloudEmail = useAuthStore((s) => s.cloudEmail)
   const cloudLogout = useAuthStore((s) => s.cloudLogout)
   const checkCloudStatus = useAuthStore((s) => s.checkCloudStatus)
+  const transientRecoveryMessage = useKanbanStore((s) => s.transientRecoveryMessage)
+  const dismissTransientRecovery = useKanbanStore((s) => s.dismissTransientRecovery)
 
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
@@ -120,6 +122,23 @@ export function CloudSyncPanel({ open, onClose }: CloudSyncPanelProps) {
 
           {cloudConnected && (
             <>
+              {transientRecoveryMessage && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-amber-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold">云端数据已按临时模式恢复</p>
+                      <p className="mt-1 text-xs leading-5">{transientRecoveryMessage}</p>
+                    </div>
+                    <button
+                      className="flex-shrink-0 rounded-lg px-2 py-1 text-xs text-amber-800 hover:bg-amber-500/10"
+                      onClick={dismissTransientRecovery}
+                    >
+                      知道了
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Sync status */}
               {syncStatus && (
                 <div className="text-xs text-on-surface-variant space-y-1">

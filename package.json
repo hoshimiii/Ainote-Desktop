@@ -5,7 +5,8 @@
   "main": "dist/main/index.js",
   "private": true,
   "scripts": {
-    "dev": "tsc -p tsconfig.node.json && tsc-alias -p tsconfig.node.json && concurrently -k -n tsc,alias,vite,electron \"tsc -p tsconfig.node.json --watch --preserveWatchOutput\" \"tsc-alias -p tsconfig.node.json --watch\" \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "predev": "pnpm run rebuild",
+    "dev": "tsc -p tsconfig.node.json && tsc-alias -p tsconfig.node.json && concurrently -k -n tsc,vite,electron \"tsc-watch -p tsconfig.node.json --onSuccess \\\"tsc-alias -p tsconfig.node.json\\\"\" \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "dev:main": "tsc -p tsconfig.node.json --watch --preserveWatchOutput",
     "dev:renderer": "vite",
     "test": "tsx --tsconfig tsconfig.test.json --test tests/**/*.test.ts",
@@ -51,6 +52,7 @@
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8",
     "electron-rebuild": "^3.2.9",
+    "tsc-watch": "^6.2.1",
     "tailwindcss": "^4.0.0",
     "tsc-alias": "^1.8.16",
     "typescript": "^5.6.0",

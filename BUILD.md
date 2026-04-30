@@ -1,7 +1,7 @@
 # AiNote Desktop - Build Notes
 
 ## Prerequisites
-- Node.js 20+, pnpm 10+
+- Node.js 20 LTS（推荐，避免工具链在 Node 24 上的兼容性问题）, pnpm 10+
 - Windows: Visual Studio Build Tools (for better-sqlite3 native compilation)
 - Run `pnpm rebuild better-sqlite3 --force` after install if needed
 
@@ -9,6 +9,8 @@
 ```bash
 pnpm dev
 ```
+
+> `pnpm dev` now runs a native module rebuild first (`predev`), so `better-sqlite3` stays aligned with Electron ABI.
 
 ## Production Build
 ```bash

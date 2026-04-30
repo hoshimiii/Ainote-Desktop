@@ -63,11 +63,20 @@ export interface WorkSpace {
 
 // --- LLM Types ---
 
+export type AssistantProviderPreset = 'openai' | 'openrouter' | 'deepseek' | 'moonshot' | 'ollama' | 'custom'
+export type AssistantWorkflowPreset = 'structured' | 'chat'
+export type AssistantWriteConfirmationMode = 'always' | 'never'
+
 export interface LLMConfig {
+  providerPreset: AssistantProviderPreset
   baseurl: string
   model: string
   usertoken: string
   temperature: number
+  systemPrompt: string
+  workflowPreset: AssistantWorkflowPreset
+  enableFormalTools: boolean
+  writeConfirmationMode: AssistantWriteConfirmationMode
 }
 
 export interface ChatMessage {
@@ -75,6 +84,16 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
+}
+
+export interface MiniDialogShortcutSettings {
+  enabled: boolean
+  accelerator: string
+}
+
+export interface MiniDialogShortcutStatus extends MiniDialogShortcutSettings {
+  isRegistered: boolean
+  error?: string
 }
 
 // --- Sync Types ---

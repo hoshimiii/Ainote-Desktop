@@ -1,98 +1,112 @@
-import { randomUUID } from "crypto";
-import { settingsDao } from "../database";
+import type { LLMConfig } from '@shared/types'
+import { normalizeLLMConfig } from '@shared/assistantConfig'
+import type { KanbanPersistedState } from '@shared/kanbanPersistence'
+import { settingsDao } from '../database'
 import {
-  executeFormalKanbanCommand,
-  normalizeFormalCommandSnapshot,
-  type FormalKanbanCommand,
-} from "@shared/formalKanbanCommands";
+  executePlannedCommands,
+  planAssistantWorkflow,
+  type AssistantPlannerDependencies,
+  type AssistantPendingPlan,
+} from './AssistantWorkflowPlanner'
+import {
+  loadKanbanSnapshot,
+  saveKanbanSnapshot,
+  type KanbanSnapshotStoreDependencies,
+} from './KanbanSnapshotStore'
 
 type PlanAndSolveResponse = {
-  handled: boolean;
-  response: string;
-  plan?: string[];
-};
+  handled: boolean
+  response: string
+  plan?: string[]
+  affectedIds?: Record<string, string | undefined>
+}
 
-const STORE_KEY = "store:kanban";
+const PENDING_PLAN_KEY = 'assistant:pending-plan'
 
-function loadSnapshot() {
-  const raw = settingsDao.get(STORE_KEY);
-  if (!raw) return normalizeFormalCommandSnapshot(null);
+export type PlanAndSolveAgentDependencies = AssistantPlannerDependencies & {
+  loadSnapshot?: () => KanbanPersistedState
+  saveSnapshot?: (snapshot: KanbanPersistedState) => void
+  loadPendingPlan?: () => AssistantPendingPlan | null
+  savePendingPlan?: (plan: AssistantPendingPlan | null) => void
+  snapshotStoreDeps?: KanbanSnapshotStoreDependencies
+}
+
+function loadPendingPlan(): AssistantPendingPlan | null {
+  const raw = settingsDao.get(PENDING_PLAN_KEY)
+  if (!raw) return null
   try {
-    return normalizeFormalCommandSnapshot(JSON.parse(raw));
+    return JSON.parse(raw) as AssistantPendingPlan
   } catch {
-    return normalizeFormalCommandSnapshot(null);
+    return null
   }
 }
 
-function extractQuotedValue(input: string) {
-  const match = input.match(/[“\"]([^“\"]+)[”\"]/);
-  return match?.[1]?.trim();
+function persistPendingPlan(plan: AssistantPendingPlan | null): void {
+  if (!plan) {
+    settingsDao.delete(PENDING_PLAN_KEY)
+    return
+  }
+  settingsDao.set(PENDING_PLAN_KEY, JSON.stringify(plan))
 }
 
-function executeAndFormat(command: FormalKanbanCommand, successMessage: string): PlanAndSolveResponse {
-  const snapshot = loadSnapshot();
-  const result = executeFormalKanbanCommand(snapshot, command);
-  if (!result.success) {
+export async function runPlanAndSolveAgent(
+  input: string,
+  config?: Partial<LLMConfig>,
+  deps: PlanAndSolveAgentDependencies = {},
+): Promise<PlanAndSolveResponse> {
+  const text = input.trim()
+  if (!text) return { handled: false, response: '' }
+
+  const snapshot = deps.loadSnapshot ? deps.loadSnapshot() : loadKanbanSnapshot(deps.snapshotStoreDeps)
+  const pendingPlan = deps.loadPendingPlan ? deps.loadPendingPlan() : loadPendingPlan()
+  const normalizedConfig = normalizeLLMConfig(config)
+  const result = await planAssistantWorkflow(text, snapshot, normalizedConfig, pendingPlan, {
+    classifyIntent: deps.classifyIntent,
+  })
+
+  if (!result.handled) {
+    return { handled: false, response: '' }
+  }
+
+  if (result.clearPendingPlan) {
+    ;(deps.savePendingPlan ?? persistPendingPlan)(null)
+  }
+
+  if (result.pendingPlan) {
+    ;(deps.savePendingPlan ?? persistPendingPlan)(result.pendingPlan)
     return {
       handled: true,
-      response: `正式命令执行失败：${result.error ?? "未知错误"}`,
-      plan: [`执行 ${command.kind}`],
-    };
+      response: result.response,
+      plan: result.plan,
+    }
   }
-  settingsDao.set(STORE_KEY, JSON.stringify(result.snapshot));
+
+  if (result.commandsToExecute?.length) {
+    const execution = executePlannedCommands(snapshot, result.commandsToExecute)
+    if (!execution.success || !execution.snapshot) {
+      return {
+        handled: true,
+        response: `正式命令执行失败：${execution.error ?? '未知错误'}`,
+        plan: result.plan ?? execution.details,
+        affectedIds: execution.affectedIds,
+      }
+    }
+
+    ;(deps.saveSnapshot ?? ((nextSnapshot: KanbanPersistedState) => saveKanbanSnapshot(nextSnapshot, deps.snapshotStoreDeps)))(execution.snapshot)
+    ;(deps.savePendingPlan ?? persistPendingPlan)(null)
+    return {
+      handled: true,
+      response: `${result.response}（已验证）`,
+      plan: [...(result.plan ?? []), ...execution.details],
+      affectedIds: execution.affectedIds,
+    }
+  }
+
   return {
     handled: true,
-    response: `${successMessage}（已验证）`,
-    plan: [`识别意图：${command.kind}`, `执行正式命令：${command.kind}`, "校验返回结果"],
-  };
+    response: result.response,
+    plan: result.plan,
+  }
 }
 
-export function runPlanAndSolveAgent(input: string): PlanAndSolveResponse {
-  const text = input.trim();
-  const quoted = extractQuotedValue(text);
-  const snapshot = loadSnapshot();
-
-  if (!quoted) {
-    return { handled: false, response: "" };
-  }
-
-  if (/创建工作区/.test(text)) {
-    return executeAndFormat({ kind: "create_workspace", workspaceId: randomUUID(), workspaceName: quoted }, `已创建工作区“${quoted}”`);
-  }
-
-  if (/创建任务区|新建任务区/.test(text)) {
-    const workspaceId = snapshot.activeWorkSpaceId ?? snapshot.workspaces[0]?.id;
-    if (!workspaceId) {
-      return { handled: true, response: "当前没有可用工作区，无法创建任务区。", plan: ["识别意图：create_mission", "发现缺少工作区上下文"] };
-    }
-    return executeAndFormat({ kind: "create_mission", workspaceId, missionId: randomUUID(), title: quoted }, `已创建任务区“${quoted}”`);
-  }
-
-  if (/创建看板|新建看板/.test(text)) {
-    const missionId = snapshot.currentMissionId;
-    if (!missionId) {
-      return { handled: true, response: "当前没有激活的任务区，无法创建看板。", plan: ["识别意图：create_board", "发现缺少任务区上下文"] };
-    }
-    return executeAndFormat({ kind: "create_board", missionId, boardId: randomUUID(), title: quoted }, `已创建看板“${quoted}”`);
-  }
-
-  if (/创建任务|新建任务/.test(text)) {
-    const boardId = snapshot.currentBoardId ?? Object.keys(snapshot.boards)[0];
-    if (!boardId) {
-      return { handled: true, response: "当前没有可用看板，无法创建任务。", plan: ["识别意图：create_task", "发现缺少看板上下文"] };
-    }
-    return executeAndFormat({ kind: "create_task", boardId, taskId: randomUUID(), title: quoted }, `已创建任务“${quoted}”`);
-  }
-
-  if (/创建笔记|新建笔记/.test(text)) {
-    const missionId = snapshot.currentMissionId;
-    if (!missionId) {
-      return { handled: true, response: "当前没有激活的任务区，无法创建笔记。", plan: ["识别意图：create_note", "发现缺少任务区上下文"] };
-    }
-    return executeAndFormat({ kind: "create_note", missionId, noteId: randomUUID(), title: quoted }, `已创建笔记“${quoted}”`);
-  }
-
-  return { handled: false, response: "" };
-}
-
-export type { PlanAndSolveResponse };
+export type { PlanAndSolveResponse }

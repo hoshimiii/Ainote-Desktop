@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useChatbotStore } from '../store'
 import { cn } from '../components/ui'
+import { normalizeLLMConfig } from '@shared/assistantConfig'
 
 /**
  * Mini Dialog — a Claude Desktop-style floating AI chat window.
@@ -18,6 +19,27 @@ export function MiniDialog() {
   // Auto-focus input on mount
   useEffect(() => {
     inputRef.current?.focus()
+  }, [])
+
+  // Refresh LLM config from store:chatbot on mount and every time the window gains focus.
+  // The mini dialog is created once (show:false) and toggled, so useEffect runs once but
+  // the focus listener ensures config is fresh on each subsequent show.
+  useEffect(() => {
+    const refreshConfig = () => {
+      window.electronAPI.store.get('chatbot')
+        .then((state: { config?: unknown } | null) => {
+          const rawConfig = state?.config
+          if (rawConfig && typeof rawConfig === 'object') {
+            useChatbotStore.setState((s) => ({
+              config: normalizeLLMConfig({ ...s.config, ...(rawConfig as Partial<import('@shared/types').LLMConfig>) }),
+            }))
+          }
+        })
+        .catch(console.error)
+    }
+    refreshConfig()
+    window.addEventListener('focus', refreshConfig)
+    return () => window.removeEventListener('focus', refreshConfig)
   }, [])
 
   // Auto-scroll

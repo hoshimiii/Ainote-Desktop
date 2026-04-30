@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 
 interface WindowTitlebarProps {
   /** 面包屑左侧：可选返回按钮 */
@@ -37,17 +37,28 @@ export function WindowTitlebar({ onBack, breadcrumb, actions }: WindowTitlebarPr
   const handleClose = () => window.electronAPI.app.close()
 
   return (
-    <div className="h-10 bg-surface-container/95 border-b border-outline-variant titlebar-drag select-none flex-shrink-0 backdrop-blur-sm">
+    <div className="relative h-11 bg-surface-container/95 border-b border-outline-variant titlebar-drag select-none flex-shrink-0 backdrop-blur-sm">
+      <div
+        aria-hidden="true"
+        data-titlebar-drag-region="top-strip"
+        className="absolute inset-x-0 top-0 h-2 titlebar-drag"
+      />
+
       <div className="app-chrome-shell grid h-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
         {/* Left: breadcrumb area */}
-        <div className="flex min-w-0 items-center gap-1 titlebar-no-drag">
+        <div
+          data-titlebar-drag-region="leading"
+          className="flex min-w-0 items-center gap-2 titlebar-drag"
+        >
           {onBack && (
-            <button
-              className="p-1 rounded-md hover:bg-surface-container-high"
-              onClick={onBack}
-            >
-              <span className="material-symbols-outlined text-sm text-on-surface-variant">arrow_back</span>
-            </button>
+            <div data-titlebar-control-cluster="leading-controls" className="titlebar-no-drag">
+              <button
+                className="p-1 rounded-md hover:bg-surface-container-high"
+                onClick={onBack}
+              >
+                <span className="material-symbols-outlined text-sm text-on-surface-variant">arrow_back</span>
+              </button>
+            </div>
           )}
           <span className="text-xs text-on-surface-variant truncate">
             {breadcrumb ?? 'AiNote'}
@@ -55,12 +66,18 @@ export function WindowTitlebar({ onBack, breadcrumb, actions }: WindowTitlebarPr
         </div>
 
         {/* Center: action buttons */}
-        <div className="flex items-center justify-self-center gap-1 titlebar-no-drag">
+        <div
+          data-titlebar-control-cluster="actions"
+          className="flex items-center justify-self-center gap-1 titlebar-no-drag"
+        >
           {actions}
         </div>
 
         {/* Right: window controls */}
-        <div className="flex items-center justify-self-end titlebar-no-drag">
+        <div
+          data-titlebar-control-cluster="window-controls"
+          className="flex items-center justify-self-end titlebar-no-drag"
+        >
           <button
             className="w-10 h-8 flex items-center justify-center rounded-md hover:bg-surface-container-high transition-colors"
             onClick={handleMinimize}

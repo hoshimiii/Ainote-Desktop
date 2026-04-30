@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, safeStorage } from 'electron'
 import {
   getDatabase,
   workspaceDao,
@@ -183,7 +183,68 @@ export function registerKanbanFormalHandlers(): void {
     return listFormalToolContracts()
   })
 
-  ipcMain.handle('kanban:plan-solve', (_event, input: string) => {
-    return runPlanAndSolveAgent(input)
+  ipcMain.handle('kanban:plan-solve', async (_event, input: string, config) => {
+    return runPlanAndSolveAgent(input, config)
   })
+}
+
+const BOT_CONFIG_KEY = 'config:bot'
+const STORE_CHATBOT_KEY = 'store:chatbot'
+
+/** Pure logic for config:bot-get — exported for unit testing */
+export function getBotConfig(
+  ss: { isEncryptionAvailable(): boolean; decryptString(buf: Buffer): string },
+  daoGet: (key: string) => string | null | undefined,
+  daoSet: (key: string, value: string) => void,
+): Record<string, unknown> | null {
+  const raw = daoGet(BOT_CONFIG_KEY)
+  if (!raw) {
+    // One-time back-fill from full chatbot blob
+    const chatbotRaw = daoGet(STORE_CHATBOT_KEY)
+    if (chatbotRaw) {
+      try {
+        const state = JSON.parse(chatbotRaw) as Record<string, unknown>
+        if (state.config && typeof state.config === 'object') {
+          const config = state.config as Record<string, unknown>
+          daoSet(BOT_CONFIG_KEY, JSON.stringify(config))
+          return config
+        }
+      } catch { /* ignore */ }
+    }
+    return null
+  }
+  const parsed = JSON.parse(raw) as Record<string, unknown>
+  if (parsed._tokenEncrypted && ss.isEncryptionAvailable()) {
+    try {
+      parsed.usertoken = ss.decryptString(Buffer.from(parsed.usertoken as string, 'base64'))
+    } catch {
+      parsed.usertoken = ''
+    }
+    delete parsed._tokenEncrypted
+  }
+  return parsed
+}
+
+/** Pure logic for config:bot-set — exported for unit testing */
+export function setBotConfig(
+  config: Record<string, unknown>,
+  ss: { isEncryptionAvailable(): boolean; encryptString(str: string): Buffer },
+  daoSet: (key: string, value: string) => void,
+): void {
+  const toStore: Record<string, unknown> = { ...config }
+  if (typeof toStore.usertoken === 'string' && toStore.usertoken && ss.isEncryptionAvailable()) {
+    toStore.usertoken = ss.encryptString(toStore.usertoken).toString('base64')
+    toStore._tokenEncrypted = true
+  }
+  daoSet(BOT_CONFIG_KEY, JSON.stringify(toStore))
+}
+
+/** Register bot config IPC handlers */
+export function registerBotConfigHandlers(): void {
+  ipcMain.handle('config:bot-get', () =>
+    getBotConfig(safeStorage, (k) => settingsDao.get(k), (k, v) => settingsDao.set(k, v)),
+  )
+  ipcMain.handle('config:bot-set', (_event, config: Record<string, unknown>) =>
+    setBotConfig(config, safeStorage, (k, v) => settingsDao.set(k, v)),
+  )
 }

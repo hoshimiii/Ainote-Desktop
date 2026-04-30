@@ -1,13 +1,22 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, nativeImage, screen } from 'electron'
 import path from 'path'
 import { initDatabase, closeDatabase, settingsDao } from './database'
-import { registerDbHandlers, registerAppHandlers, registerLlmHandlers, registerCodeHandlers, registerSyncHandlers, registerAuthHandlers, registerKanbanFormalHandlers } from './ipc'
+import { registerDbHandlers, registerAppHandlers, registerLlmHandlers, registerCodeHandlers, registerSyncHandlers, registerAuthHandlers, registerKanbanFormalHandlers, registerBotConfigHandlers } from './ipc'
+import {
+  createMiniDialogShortcutStatus,
+  formatMiniDialogTrayLabel,
+  normalizeMiniDialogShortcutSettings,
+} from '@shared/miniDialogShortcut'
+import type { MiniDialogShortcutSettings, MiniDialogShortcutStatus } from '@shared/types'
 
 let mainWindow: BrowserWindow | null = null
 let miniDialogWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 
 const isDev = !app.isPackaged
+const MINI_DIALOG_SHORTCUT_SETTINGS_KEY = 'miniDialogShortcutSettings'
+
+let miniDialogShortcutStatus: MiniDialogShortcutStatus = createMiniDialogShortcutStatus()
 
 // --- Single Instance Lock ---
 const gotTheLock = app.requestSingleInstanceLock()
@@ -55,6 +64,82 @@ function saveWindowState(): void {
   } catch {}
 }
 
+function loadMiniDialogShortcutSettings(): MiniDialogShortcutSettings {
+  try {
+    const raw = settingsDao.get(MINI_DIALOG_SHORTCUT_SETTINGS_KEY)
+    if (raw) {
+      return normalizeMiniDialogShortcutSettings(JSON.parse(raw) as Partial<MiniDialogShortcutSettings>)
+    }
+  } catch {}
+  return normalizeMiniDialogShortcutSettings()
+}
+
+function saveMiniDialogShortcutSettings(settings: MiniDialogShortcutSettings): void {
+  settingsDao.set(MINI_DIALOG_SHORTCUT_SETTINGS_KEY, JSON.stringify(settings))
+}
+
+function emitMiniDialogShortcutStatus(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('dialog:shortcut-status-changed', miniDialogShortcutStatus)
+  }
+}
+
+function refreshTrayMenu(): void {
+  if (!tray) return
+
+  const miniDialogItem = miniDialogShortcutStatus.isRegistered
+    ? { label: 'Mini Dialog', accelerator: miniDialogShortcutStatus.accelerator, click: () => toggleMiniDialog() }
+    : { label: formatMiniDialogTrayLabel(miniDialogShortcutStatus), click: () => toggleMiniDialog() }
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Show AiNote', click: () => { mainWindow?.show(); mainWindow?.focus() } },
+    miniDialogItem,
+    { type: 'separator' },
+    { label: 'Quit', click: () => { saveWindowState(); app.quit() } },
+  ])
+
+  tray.setContextMenu(contextMenu)
+}
+
+function applyMiniDialogShortcutSettings(partial?: Partial<MiniDialogShortcutSettings>): MiniDialogShortcutStatus {
+  const currentSettings = loadMiniDialogShortcutSettings()
+  const nextSettings = normalizeMiniDialogShortcutSettings({ ...currentSettings, ...partial })
+
+  if (miniDialogShortcutStatus.accelerator) {
+    globalShortcut.unregister(miniDialogShortcutStatus.accelerator)
+  }
+
+  saveMiniDialogShortcutSettings(nextSettings)
+
+  if (!nextSettings.enabled) {
+    miniDialogShortcutStatus = createMiniDialogShortcutStatus(nextSettings, { isRegistered: false })
+    refreshTrayMenu()
+    emitMiniDialogShortcutStatus()
+    return miniDialogShortcutStatus
+  }
+
+  try {
+    const isRegistered = globalShortcut.register(nextSettings.accelerator, () => {
+      toggleMiniDialog()
+    })
+
+    miniDialogShortcutStatus = createMiniDialogShortcutStatus(nextSettings, {
+      isRegistered,
+      error: isRegistered ? undefined : '快捷键可能已被其他应用占用，或当前格式不可注册。',
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    miniDialogShortcutStatus = createMiniDialogShortcutStatus(nextSettings, {
+      isRegistered: false,
+      error: message,
+    })
+  }
+
+  refreshTrayMenu()
+  emitMiniDialogShortcutStatus()
+  return miniDialogShortcutStatus
+}
+
 // --- Mini Dialog Window (Claude Desktop style) ---
 function createMiniDialog(): void {
   miniDialogWindow = new BrowserWindow({
@@ -99,12 +184,10 @@ function toggleMiniDialog(): void {
   if (miniDialogWindow?.isVisible()) {
     miniDialogWindow.hide()
   } else {
-    // Position near cursor / center of screen
     const cursorPoint = screen.getCursorScreenPoint()
     const display = screen.getDisplayNearestPoint(cursorPoint)
     const { width, height } = miniDialogWindow!.getBounds()
 
-    // Center horizontally on cursor display, offset vertically
     const x = Math.round(display.bounds.x + (display.bounds.width - width) / 2)
     const y = Math.round(display.bounds.y + (display.bounds.height - height) / 2 - 100)
 
@@ -116,20 +199,13 @@ function toggleMiniDialog(): void {
 
 // --- System Tray ---
 function createTray(): void {
-  // Use a simple 16x16 icon (generated programmatically for dev; will use real icon in production)
   const icon = nativeImage.createEmpty()
   tray = new Tray(icon.isEmpty() ? nativeImage.createFromDataURL(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIElEQVQ4T2P8z8BQz0BAwMgwigEKBo0BowaMGjBgBgAAyqIH8bk3RXAAAAAASUVORK5CYII='
   ) : icon)
   tray.setToolTip('AiNote')
 
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show AiNote', click: () => { mainWindow?.show(); mainWindow?.focus() } },
-    { label: 'Mini Dialog', accelerator: 'Shift+Alt+Space', click: () => toggleMiniDialog() },
-    { type: 'separator' },
-    { label: 'Quit', click: () => { saveWindowState(); app.quit() } },
-  ])
-  tray.setContextMenu(contextMenu)
+  refreshTrayMenu()
 
   tray.on('click', () => {
     if (mainWindow?.isVisible()) {
@@ -180,7 +256,6 @@ function createMainWindow(): void {
     mainWindow = null
   })
 
-  // Save window state on move/resize/maximize
   mainWindow.on('resize', () => saveWindowState())
   mainWindow.on('move', () => saveWindowState())
   mainWindow.on('maximize', () => saveWindowState())
@@ -189,10 +264,8 @@ function createMainWindow(): void {
 
 // --- App Lifecycle ---
 app.whenReady().then(() => {
-  // Initialize database
   initDatabase()
 
-  // Register IPC handlers
   registerDbHandlers()
   registerAppHandlers()
   registerLlmHandlers()
@@ -200,21 +273,27 @@ app.whenReady().then(() => {
   registerSyncHandlers()
   registerAuthHandlers()
   registerKanbanFormalHandlers()
+  registerBotConfigHandlers()
 
   createMainWindow()
-
-  // --- System Tray ---
+  createMiniDialog()
+  applyMiniDialogShortcutSettings()
   createTray()
 
-  // --- Mini Dialog (Shift+Alt+Space) ---
-  createMiniDialog()
-  globalShortcut.register('Shift+Alt+Space', () => {
+  ipcMain.on('dialog:toggle', () => {
     toggleMiniDialog()
   })
 
-  // IPC toggle from renderer
-  ipcMain.on('dialog:toggle', () => {
-    toggleMiniDialog()
+  ipcMain.handle('dialog:shortcut-settings', () => {
+    return loadMiniDialogShortcutSettings()
+  })
+
+  ipcMain.handle('dialog:shortcut-status', () => {
+    return miniDialogShortcutStatus
+  })
+
+  ipcMain.handle('dialog:update-shortcut-settings', (_event, settings: Partial<MiniDialogShortcutSettings>) => {
+    return applyMiniDialogShortcutSettings(settings)
   })
 
   app.on('activate', () => {

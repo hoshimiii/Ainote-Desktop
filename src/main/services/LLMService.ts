@@ -15,6 +15,17 @@ export interface ApiMessage {
   content: string
 }
 
+export const DEFAULT_OPENAI_COMPATIBLE_BASE_URL = 'https://api.openai.com/v1'
+
+export function normalizeOpenAICompatibleBaseURL(baseURL?: string): string {
+  const normalized = (baseURL || DEFAULT_OPENAI_COMPATIBLE_BASE_URL).trim().replace(/\/+$/, '')
+  return normalized.replace(/(?:\/chat\/completions)+$/i, '')
+}
+
+export function buildChatCompletionsUrl(baseURL?: string): string {
+  return `${normalizeOpenAICompatibleBaseURL(baseURL)}/chat/completions`
+}
+
 /**
  * Stream completion from an OpenAI-compatible API.
  * Yields text tokens as they arrive.
@@ -23,8 +34,7 @@ export async function* streamCompletion(
   messages: ApiMessage[],
   config: LLMStreamConfig,
 ): AsyncGenerator<string> {
-  const baseURL = (config.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
-  const url = `${baseURL}/chat/completions`
+  const url = buildChatCompletionsUrl(config.baseURL)
 
   const response = await fetch(url, {
     method: 'POST',
@@ -42,7 +52,10 @@ export async function* streamCompletion(
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(`LLM API error ${response.status}: ${text}`)
+    const hint = response.status === 404
+      ? ' 请确认 Base URL 填写的是提供商根路径（例如 .../v1），而不是完整的 /chat/completions 地址。'
+      : ''
+    throw new Error(`LLM API error ${response.status} @ ${url}: ${text}${hint}`)
   }
 
   const reader = response.body?.getReader()

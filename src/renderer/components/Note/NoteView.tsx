@@ -9,12 +9,13 @@ import { LinkBlockDialog } from '../items/LinkBlockDialog'
 import type { Block } from '@shared/types'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { SortableItem, DragHandle } from '../dnd/SortableItem'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '../ui'
 
 export function NoteView() {
   const currentMissionId = useKanbanStore((s) => s.currentMissionId)
   const currentNoteId = useKanbanStore((s) => s.currentNoteId)
+  const activeNoteTargetBlockId = useKanbanStore((s) => s.activeNoteTargetBlockId)
   const notes = useKanbanStore((s) => s.notes)
   const boards = useKanbanStore((s) => s.boards)
   const tasks = useKanbanStore((s) => s.tasks)
@@ -25,9 +26,11 @@ export function NoteView() {
   const updateNoteBlocks = useKanbanStore((s) => s.updateNoteBlocks)
   const insertBlock = useKanbanStore((s) => s.insertBlock)
   const setCenterTab = useKanbanStore((s) => s.setCenterTab)
+  const clearActiveNoteTargetBlock = useKanbanStore((s) => s.clearActiveNoteTargetBlock)
 
   const [linkingBlockId, setLinkingBlockId] = useState<string | null>(null)
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
+  const blockRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   if (!currentMissionId || !currentNoteId) return null
   const note = notes[currentNoteId]
@@ -45,6 +48,23 @@ export function NoteView() {
       note.blocks.filter((b) => b.id !== blockId),
     )
   }
+
+  useEffect(() => {
+    if (!activeNoteTargetBlockId) return
+
+    const hasTargetBlock = note.blocks.some((block) => block.id === activeNoteTargetBlockId)
+    if (!hasTargetBlock) {
+      clearActiveNoteTargetBlock()
+      return
+    }
+
+    const targetElement = blockRefs.current[activeNoteTargetBlockId]
+    if (!targetElement) return
+
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setSelectedBlockId(activeNoteTargetBlockId)
+    clearActiveNoteTargetBlock()
+  }, [activeNoteTargetBlockId, clearActiveNoteTargetBlock, note.blocks])
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -85,7 +105,9 @@ export function NoteView() {
       <div className="flex-1 overflow-y-auto">
         <div className="note-content-shell py-8 space-y-4">
           {/* Insert handle before first block */}
-          <InsertBlockHandle onInsert={(type) => insertBlock(currentNoteId, -1, type)} />
+          <div className="note-detail-block-offset">
+            <InsertBlockHandle onInsert={(type) => insertBlock(currentNoteId, -1, type)} />
+          </div>
 
           <SortableContext items={note.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
               {note.blocks.map((block, index) => {
@@ -100,8 +122,11 @@ export function NoteView() {
                 return (
                   <SortableItem key={block.id} id={block.id} data={{ type: 'block' }} dragHandle>
                     <div
+                      ref={(element) => {
+                        blockRefs.current[block.id] = element
+                      }}
                       className={cn(
-                        'relative group/block rounded-2xl transition-all',
+                        'note-detail-block-offset relative group/block rounded-2xl transition-all',
                         isSelected && 'bg-surface-container-low/70 shadow-[inset_0_0_0_1px_rgba(114,125,128,0.16)]',
                       )}
                       onPointerDownCapture={() => setSelectedBlockId(block.id)}
@@ -109,15 +134,17 @@ export function NoteView() {
                       {/* Drag handle + link indicator */}
                       <div
                         className={cn(
-                          'absolute -left-10 top-3 z-10 flex flex-col gap-1 rounded-xl bg-surface-container-low/95 p-1 shadow-sm ring-1 ring-outline-variant/50 transition-opacity',
-                          isSelected ? 'opacity-100' : 'opacity-0 group-hover/block:opacity-100 group-focus-within/block:opacity-100',
+                          'absolute left-2 flex flex-col gap-1 rounded-xl bg-surface-container-low/95 p-[2px] shadow-sm ring-0.6 ring-outline-variant/50 transition-opacity',
+                          isSelected
+                            ? 'opacity-100 pointer-events-auto'
+                            : 'opacity-0 pointer-events-none group-hover/block:opacity-100 group-hover/block:pointer-events-auto group-focus-within/block:opacity-100 group-focus-within/block:pointer-events-auto',
                         )}
                       >
-                        <DragHandle className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-surface-container-high">
+                        <DragHandle className="flex items-center justify-center cursor-grab active:cursor-grabbing select-none touch-none rounded hover:bg-surface-container-high">
                           <span className="material-symbols-outlined text-xs text-on-surface-variant">drag_indicator</span>
                         </DragHandle>
                         <button
-                          className="p-0.5 rounded hover:bg-surface-container-high"
+                          className=" rounded hover:bg-surface-container-high"
                           title="关联任务"
                           onClick={() => setLinkingBlockId(block.id)}
                         >
@@ -138,31 +165,35 @@ export function NoteView() {
                           {linkLabel}
                         </button>
                       )}
-                      {block.type === 'code' ? (
-                        <CodeBlockEditor
-                          block={block}
-                          onChange={(updated) => handleBlockChange(index, updated)}
-                          onDelete={() => handleBlockDelete(block.id)}
-                        />
-                      ) : (
-                        <MarkdownBlock
-                          block={block}
-                          onChange={(updated) => handleBlockChange(index, updated)}
-                          onDelete={() => handleBlockDelete(block.id)}
-                          selected={selectedBlockId === block.id}
-                          onSelect={() => setSelectedBlockId(block.id)}
-                        />
-                      )}
+                      <div className="min-w-0">
+                        {block.type === 'code' ? (
+                          <CodeBlockEditor
+                            block={block}
+                            onChange={(updated) => handleBlockChange(index, updated)}
+                            onDelete={() => handleBlockDelete(block.id)}
+                          />
+                        ) : (
+                          <MarkdownBlock
+                            block={block}
+                            onChange={(updated) => handleBlockChange(index, updated)}
+                            onDelete={() => handleBlockDelete(block.id)}
+                            selected={selectedBlockId === block.id}
+                            onSelect={() => setSelectedBlockId(block.id)}
+                          />
+                        )}
+                      </div>
                     </div>
                     {/* Insert handle after each block */}
-                    <InsertBlockHandle onInsert={(type) => insertBlock(currentNoteId, index, type)} />
+                    <div className="note-detail-block-offset">
+                      <InsertBlockHandle onInsert={(type) => insertBlock(currentNoteId, index, type)} />
+                    </div>
                   </SortableItem>
                 )
               })}
           </SortableContext>
 
           {/* Add block buttons */}
-          <div className="flex gap-2 pt-4">
+          <div className="note-detail-block-offset flex gap-2 pt-4">
             <button
               className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm text-on-surface-variant hover:bg-surface-container-high transition-colors"
               onClick={() => {

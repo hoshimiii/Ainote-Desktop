@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { KanbanPersistedState } from '../shared/kanbanPersistence'
 import type { FormalKanbanCommand, FormalCommandResult } from '../shared/formalKanbanCommands'
 import type { FormalToolContract } from '../shared/formalToolContracts'
+import type { LLMConfig, MiniDialogShortcutSettings, MiniDialogShortcutStatus } from '../shared/types'
 import type { PlanAndSolveResponse } from '../main/services/PlanAndSolveAgentService'
 
 /**
@@ -86,6 +87,19 @@ const electronAPI = {
   // --- Dialog Operations ---
   dialog: {
     toggle: () => ipcRenderer.send('dialog:toggle'),
+    getShortcutSettings: () =>
+      ipcRenderer.invoke('dialog:shortcut-settings') as Promise<MiniDialogShortcutSettings>,
+    getShortcutStatus: () =>
+      ipcRenderer.invoke('dialog:shortcut-status') as Promise<MiniDialogShortcutStatus>,
+    updateShortcutSettings: (settings: Partial<MiniDialogShortcutSettings>) =>
+      ipcRenderer.invoke('dialog:update-shortcut-settings', settings) as Promise<MiniDialogShortcutStatus>,
+    onShortcutStatusChange: (callback: (status: MiniDialogShortcutStatus) => void) => {
+      const handler = (_event: unknown, status: MiniDialogShortcutStatus) => callback(status)
+      ipcRenderer.on('dialog:shortcut-status-changed', handler)
+      return () => {
+        ipcRenderer.removeListener('dialog:shortcut-status-changed', handler)
+      }
+    },
   },
 
   // --- Store Operations (SQLite-backed Zustand persistence) ---
@@ -131,8 +145,14 @@ const electronAPI = {
       ipcRenderer.invoke('kanban:execute', command) as Promise<FormalCommandResult>,
     contracts: () =>
       ipcRenderer.invoke('kanban:contracts') as Promise<FormalToolContract[]>,
-    planAndSolve: (input: string) =>
-      ipcRenderer.invoke('kanban:plan-solve', input) as Promise<PlanAndSolveResponse>,
+    planAndSolve: (input: string, config?: Partial<LLMConfig>) =>
+      ipcRenderer.invoke('kanban:plan-solve', input, config) as Promise<PlanAndSolveResponse>,
+  },
+
+  // --- Bot Config (dedicated immediate-write persistence, bypasses Zustand debounce) ---
+  botConfig: {
+    get: () => ipcRenderer.invoke('config:bot-get') as Promise<Partial<LLMConfig> | null>,
+    set: (config: Partial<LLMConfig>) => ipcRenderer.invoke('config:bot-set', config) as Promise<void>,
   },
 }
 

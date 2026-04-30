@@ -186,7 +186,7 @@ export function MarkdownBlock({ block, onChange, onDelete, selected, onSelect }:
               }
             }
           }}
-          className="w-full bg-transparent pr-8 text-base text-on-surface leading-[1.7] resize-none focus:outline-none placeholder:text-on-surface-variant/50"
+          className="w-full bg-transparent pr-8 text-base text-on-surface leading-[2] resize-none focus:outline-none placeholder:text-on-surface-variant/50"
           placeholder="输入 Markdown 内容..."
           rows={1}
         />

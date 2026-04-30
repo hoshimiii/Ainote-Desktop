@@ -114,6 +114,10 @@ h1, h2, h3, .font-display {
   padding-inline: clamp(1rem, 2vw, 1.5rem);
 }
 
+.note-detail-block-offset {
+  padding-inline-start: clamp(2.75rem, 4vw, 3.25rem);
+}
+
 /* Electron-specific: make frameless title bar draggable */
 .titlebar-drag {
   -webkit-app-region: drag;

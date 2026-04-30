@@ -30,15 +30,17 @@ export function SortableItem({ id, data, dragHandle, children }: SortableItemPro
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.72 : 1,
     position: 'relative' as const,
     zIndex: isDragging ? 10 : undefined,
+    filter: isDragging ? 'drop-shadow(0 18px 36px rgba(42, 52, 55, 0.18))' : undefined,
+    willChange: 'transform',
   }
 
   if (dragHandle) {
     return (
       <DragHandleContext.Provider value={{ attributes, listeners }}>
-        <div ref={setNodeRef} style={style}>
+        <div ref={setNodeRef} style={style} data-dragging={isDragging ? 'true' : 'false'}>
           {children}
         </div>
       </DragHandleContext.Provider>
@@ -46,7 +48,7 @@ export function SortableItem({ id, data, dragHandle, children }: SortableItemPro
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} data-dragging={isDragging ? 'true' : 'false'} {...attributes} {...listeners}>
       {children}
     </div>
   )
@@ -57,7 +59,12 @@ export function DragHandle({ children, className }: { children?: React.ReactNode
   const ctx = useContext(DragHandleContext)
   if (!ctx) return <>{children}</>
   return (
-    <div className={className} {...ctx.attributes} {...ctx.listeners}>
+    <div
+      className={className}
+      onMouseDown={(event) => event.preventDefault()}
+      {...ctx.attributes}
+      {...ctx.listeners}
+    >
       {children}
     </div>
   )

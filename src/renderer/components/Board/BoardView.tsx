@@ -4,15 +4,21 @@ import { DeleteDialog } from '../items/DeleteDialog'
 import { RenameDialog } from '../items/RenameDialog'
 import { Button, Card, ScrollArea, cn } from '../ui'
 import type { SubTask } from '@shared/types'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { SortableItem } from '../dnd/SortableItem'
+import {
+  getLinkedNoteTitle,
+  isModifierNoteNavigation,
+  resolveLinkedNoteTarget,
+} from './noteNavigation'
 
 export function BoardView() {
   const currentMissionId = useKanbanStore((s) => s.currentMissionId)
   const missions = useKanbanStore((s) => s.missions)
   const boards = useKanbanStore((s) => s.boards)
   const tasks = useKanbanStore((s) => s.tasks)
+  const notes = useKanbanStore((s) => s.notes)
   const boardOrder = useKanbanStore((s) => s.boardOrder)
   const createBoard = useKanbanStore((s) => s.createBoard)
   const deleteBoard = useKanbanStore((s) => s.deleteBoard)
@@ -25,6 +31,7 @@ export function BoardView() {
   const toggleSubTask = useKanbanStore((s) => s.toggleSubTask)
   const createNote = useKanbanStore((s) => s.createNote)
   const setActiveNote = useKanbanStore((s) => s.setActiveNote)
+  const setCenterTab = useKanbanStore((s) => s.setCenterTab)
 
   if (!currentMissionId) return null
   const mission = missions[currentMissionId]
@@ -33,6 +40,21 @@ export function BoardView() {
   // Get ordered boards for THIS mission only
   const orderedBoardIds = boardOrder[currentMissionId] ?? []
   const displayBoardIds = orderedBoardIds.filter((id) => boards[id])
+
+  const resolveNoteTitle = useCallback(
+    (noteId?: string) => getLinkedNoteTitle(noteId, notes),
+    [notes],
+  )
+
+  const openLinkedNote = useCallback(
+    (noteId?: string, blockId?: string) => {
+      const target = resolveLinkedNoteTarget(noteId, blockId, currentMissionId, missions, notes)
+      if (!target) return
+      setCenterTab('notes')
+      setActiveNote(target.missionId, target.noteId, target.blockId)
+    },
+    [currentMissionId, missions, notes, setActiveNote, setCenterTab],
+  )
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -104,6 +126,8 @@ export function BoardView() {
                       onAddSubTask={addSubTask}
                       onRemoveSubTask={removeSubTask}
                       onToggleSubTask={toggleSubTask}
+                      getLinkedNoteTitle={resolveNoteTitle}
+                      onOpenLinkedNote={openLinkedNote}
                     />
                   </SortableItem>
                 )
@@ -143,6 +167,8 @@ function BoardColumn({
   onAddSubTask,
   onRemoveSubTask,
   onToggleSubTask,
+  getLinkedNoteTitle,
+  onOpenLinkedNote,
 }: {
   boardId: string
   title: string
@@ -156,6 +182,8 @@ function BoardColumn({
   onAddSubTask: (taskId: string, st: SubTask) => void
   onRemoveSubTask: (taskId: string, stId: string) => void
   onToggleSubTask: (taskId: string, stId: string) => void
+  getLinkedNoteTitle: (noteId?: string) => string | null
+  onOpenLinkedNote: (noteId?: string, blockId?: string) => void
 }) {
   return (
     <div className="w-72 flex-shrink-0 flex flex-col rounded-xl bg-surface-container">
@@ -196,6 +224,8 @@ function BoardColumn({
                     onAddSubTask={(st) => onAddSubTask(taskId, st)}
                     onRemoveSubTask={(stId) => onRemoveSubTask(taskId, stId)}
                     onToggleSubTask={(stId) => onToggleSubTask(taskId, stId)}
+                    getLinkedNoteTitle={getLinkedNoteTitle}
+                    onOpenLinkedNote={onOpenLinkedNote}
                   />
                 </SortableItem>
               )
@@ -228,6 +258,8 @@ function TaskCard({
   onAddSubTask,
   onRemoveSubTask,
   onToggleSubTask,
+  getLinkedNoteTitle,
+  onOpenLinkedNote,
 }: {
   task: import('@shared/types').Task
   onRename: (name: string) => void
@@ -235,9 +267,12 @@ function TaskCard({
   onAddSubTask: (st: SubTask) => void
   onRemoveSubTask: (stId: string) => void
   onToggleSubTask: (stId: string) => void
+  getLinkedNoteTitle: (noteId?: string) => string | null
+  onOpenLinkedNote: (noteId?: string, blockId?: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const completedCount = task.subtasks.filter((st) => st.done).length
+  const taskLinkedNoteTitle = getLinkedNoteTitle(task.linkedNoteId)
 
   return (
     <Card className="mb-2 group" elevation={1}>
@@ -253,7 +288,16 @@ function TaskCard({
           </button>
           <button
             className="flex-1 text-left text-sm font-medium text-on-surface truncate"
-            onClick={() => setExpanded(!expanded)}
+            title={taskLinkedNoteTitle ? 'Ctrl/Cmd + 点击打开关联笔记' : undefined}
+            onClick={(event) => {
+              if (task.linkedNoteId && taskLinkedNoteTitle && isModifierNoteNavigation(event)) {
+                event.preventDefault()
+                event.stopPropagation()
+                onOpenLinkedNote(task.linkedNoteId)
+                return
+              }
+              setExpanded(!expanded)
+            }}
           >
             {task.title}
           </button>
@@ -280,11 +324,19 @@ function TaskCard({
       )}
 
       {/* Linked note indicator */}
-      {task.linkedNoteId && (
-        <div className="mt-1 flex items-center gap-1 text-[10px] text-primary">
+      {task.linkedNoteId && taskLinkedNoteTitle && (
+        <button
+          type="button"
+          className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] text-primary transition-colors hover:bg-primary/15"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            onOpenLinkedNote(task.linkedNoteId)
+          }}
+        >
           <span className="material-symbols-outlined text-[10px]">description</span>
-          已关联笔记
-        </div>
+          {taskLinkedNoteTitle}
+        </button>
       )}
 
       {/* Expanded subtasks */}
@@ -300,9 +352,40 @@ function TaskCard({
                     onChange={() => onToggleSubTask(st.id)}
                     className="rounded"
                   />
-                  <span className={cn('flex-1', st.done && 'line-through text-on-surface-variant')}>
-                    {st.title}
-                  </span>
+                  <button
+                    type="button"
+                    className={cn(
+                      'flex-1 min-w-0 text-left',
+                      st.done && 'line-through text-on-surface-variant',
+                    )}
+                    title={st.noteId ? 'Ctrl/Cmd + 点击打开关联笔记' : undefined}
+                    onPointerDown={(event) => {
+                      if (st.noteId) event.stopPropagation()
+                    }}
+                    onClick={(event) => {
+                      if (st.noteId && isModifierNoteNavigation(event)) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        onOpenLinkedNote(st.noteId, st.blockId)
+                      }
+                    }}
+                  >
+                    <span className="truncate">{st.title}</span>
+                  </button>
+                  {st.noteId && getLinkedNoteTitle(st.noteId) && (
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary transition-colors hover:bg-primary/15"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onOpenLinkedNote(st.noteId, st.blockId)
+                      }}
+                    >
+                      <span className="material-symbols-outlined text-[10px]">description</span>
+                      {getLinkedNoteTitle(st.noteId)}
+                    </button>
+                  )}
                   <button
                     className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-surface-container-highest"
                     onClick={() => onRemoveSubTask(st.id)}

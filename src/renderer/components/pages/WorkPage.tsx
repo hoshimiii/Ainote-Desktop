@@ -19,6 +19,7 @@ import {
 } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import { orderOwnedIds } from '@shared/orderedIds'
+import { getBlockDragOverlayMeta } from '../dnd/dragOverlayMeta'
 
 export type DndItemType = 'mission' | 'board' | 'board-card' | 'task' | 'subtask' | 'note' | 'block'
 
@@ -53,8 +54,6 @@ export function WorkPage() {
   const listPanelCollapsed = useKanbanStore((s) => s.listPanelCollapsed)
   const rehydrationError = useKanbanStore((s) => s.rehydrationError)
   const clearRehydrationError = useKanbanStore((s) => s.clearRehydrationError)
-  const transientRecoveryMessage = useKanbanStore((s) => s.transientRecoveryMessage)
-  const dismissTransientRecovery = useKanbanStore((s) => s.dismissTransientRecovery)
   const setWorkSpace = useKanbanStore((s) => s.setWorkSpace)
   const logout = useAuthStore((s) => s.logout)
   const [syncPanelOpen, setSyncPanelOpen] = useState(false)
@@ -64,13 +63,13 @@ export function WorkPage() {
   const [activeType, setActiveType] = useState<DndItemType | null>(null)
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 500, tolerance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6, delay: 200 } }),
   )
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const type = event.active.data.current?.type as DndItemType | undefined
     setActiveId(String(event.active.id))
-    setActiveType(type ?? null)
+    setActiveType(type ?? null) 
   }, [])
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
@@ -256,21 +255,6 @@ export function WorkPage() {
         </div>
       )}
 
-      {transientRecoveryMessage && (
-        <div className="mx-4 mt-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-800">
-          <div>
-            <p className="text-sm font-semibold">云端数据已按临时模式恢复</p>
-            <p className="mt-1 text-xs leading-5">{transientRecoveryMessage}</p>
-          </div>
-          <button
-            className="flex-shrink-0 rounded-lg px-2 py-1 text-xs text-amber-800 hover:bg-amber-500/10"
-            onClick={dismissTransientRecovery}
-          >
-            知道了
-          </button>
-        </div>
-      )}
-
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -396,9 +380,11 @@ function DragOverlayContent({ type, id }: { type: DndItemType; id: string }) {
   const boards = useKanbanStore((s) => s.boards)
   const tasks = useKanbanStore((s) => s.tasks)
   const notes = useKanbanStore((s) => s.notes)
+  const currentNoteId = useKanbanStore((s) => s.currentNoteId)
 
   let label = id
   let icon = 'drag_indicator'
+  let detail: string | undefined
 
   switch (type) {
     case 'mission':
@@ -428,15 +414,27 @@ function DragOverlayContent({ type, id }: { type: DndItemType; id: string }) {
       icon = 'description'
       break
     case 'block':
-      label = '内容块'
-      icon = 'article'
+      {
+        const block = currentNoteId ? notes[currentNoteId]?.blocks.find((candidate) => candidate.id === id) : undefined
+        const meta = getBlockDragOverlayMeta(block)
+        label = meta.label
+        icon = meta.icon
+        detail = meta.detail
+      }
       break
   }
 
   return (
-    <div className="px-3 py-2 rounded-lg bg-surface shadow-lg border border-outline-variant flex items-center gap-2 max-w-xs">
+    <div className="max-w-sm rounded-xl border border-outline-variant bg-surface px-3 py-2.5 shadow-lg">
+      <div className="flex items-start gap-2">
       <span className="material-symbols-outlined text-sm text-on-surface-variant">{icon}</span>
-      <span className="text-sm text-on-surface truncate">{label}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-on-surface">{label}</p>
+          {detail && (
+            <p className="mt-0.5 truncate text-[11px] text-on-surface-variant">{detail}</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
