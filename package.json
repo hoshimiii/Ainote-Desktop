@@ -11,7 +11,9 @@
     "dev:renderer": "vite",
     "test": "tsx --tsconfig tsconfig.test.json --test tests/**/*.test.ts",
     "build": "tsc -p tsconfig.web.json && vite build && tsc -p tsconfig.node.json && tsc-alias -p tsconfig.node.json",
-    "build:electron": "pnpm build && electron-builder --win",
+    "prepack:win": "node scripts/stop-windows-unpacked-ainote.js",
+    "build:electron": "pnpm build && pnpm run prepack:win && node scripts/package-windows.js",
+    "build:electron:signed": "pnpm build && pnpm run prepack:win && electron-builder --win",
     "preview": "vite preview",
     "rebuild": "electron-rebuild -f -w better-sqlite3"
   },

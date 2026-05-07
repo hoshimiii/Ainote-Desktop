@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import type { FormalKanbanCommand } from '@shared/formalKanbanCommands'
-import type { AssistantCapabilityDescriptor } from '../AssistantPlannerModels'
+import type { AssistantCapabilityDescriptor, AssistantToolArguments } from '../AssistantPlannerModels'
 import {
   WRITE_INTENT_PATTERN,
   createQuestionResponse,
@@ -18,17 +18,165 @@ import {
   resolveWorkspace,
 } from '../AssistantPlannerShared'
 
+function getStringArg(args: AssistantToolArguments, key: string): string | undefined {
+  const value = args[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
 export const simpleCreateTool: AssistantCapabilityDescriptor = {
   id: 'simple-create',
   kind: 'tool',
   label: '简单创建',
   description: '为单一的创建类请求生成正式命令计划，例如创建工作区、任务区、看板、任务、子任务或笔记。',
+  readOnly: false,
+  inputSchema: {
+    entityType: {
+      type: 'string',
+      description: '要创建的实体类型。',
+      enum: ['workspace', 'mission', 'board', 'task', 'subtask', 'note'],
+      required: true,
+    },
+    title: {
+      type: 'string',
+      description: '要创建的实体标题。',
+      required: true,
+    },
+    workspaceName: {
+      type: 'string',
+      description: '目标工作区名称。创建任务区、看板、任务、子任务或笔记时可选。',
+    },
+    missionTitle: {
+      type: 'string',
+      description: '目标任务区标题。创建看板、任务、子任务或笔记时可选。',
+    },
+    boardTitle: {
+      type: 'string',
+      description: '目标看板标题。创建任务或子任务时可选。',
+    },
+    taskTitle: {
+      type: 'string',
+      description: '目标任务标题。创建子任务时可选。',
+    },
+  },
   match: ({ input }) => {
     if (!WRITE_INTENT_PATTERN.test(input)) return null
     if (/(创建|新建)(工作区|任务区|看板|任务(?!区)|子任务|笔记)/i.test(input)) {
       return { score: 84, signals: ['simple-create'] }
     }
     return null
+  },
+  execute: ({ input, snapshot, config }, args) => {
+    const entityType = getStringArg(args, 'entityType')
+    const title = getStringArg(args, 'title')
+    if (!entityType || !title) {
+      return createQuestionResponse('请提供要创建的实体类型和标题。', ['等待结构化创建参数'])
+    }
+
+    const workspaceTitle = getStringArg(args, 'workspaceName')
+    const quotedMission = entityType === 'mission' ? title : getStringArg(args, 'missionTitle')
+    const quotedBoard = entityType === 'board' ? title : getStringArg(args, 'boardTitle')
+    const quotedTask = entityType === 'task' ? title : getStringArg(args, 'taskTitle')
+
+    if (entityType === 'workspace') {
+      return createWritePlan(
+        input,
+        `已整理出创建工作区“${title}”的预览。`,
+        [`创建工作区“${title}”`],
+        [{ kind: 'create_workspace', workspaceId: randomUUID(), workspaceName: title }],
+        config,
+      )
+    }
+
+    if (entityType === 'mission') {
+      const plan = ['读取工作区上下文']
+      const commands: FormalKanbanCommand[] = []
+      const workspace = resolveWorkspace(snapshot, workspaceTitle, plan, commands)
+      if ('handled' in workspace) return workspace
+      return createWritePlan(
+        input,
+        `已整理出创建任务区“${title}”的预览。`,
+        [...plan, `创建任务区“${title}”`],
+        [...commands, { kind: 'create_mission', workspaceId: workspace.id, missionId: randomUUID(), title }],
+        config,
+      )
+    }
+
+    if (entityType === 'board') {
+      const plan = ['读取工作区与任务区上下文']
+      const commands: FormalKanbanCommand[] = []
+      const workspace = resolveWorkspace(snapshot, workspaceTitle, plan, commands)
+      if ('handled' in workspace) return workspace
+      const mission = resolveMission(snapshot, workspace, quotedMission, plan, commands)
+      if ('handled' in mission) return mission
+      return createWritePlan(
+        input,
+        `已整理出创建看板“${title}”的预览。`,
+        [...plan, `创建看板“${title}”`],
+        [...commands, { kind: 'create_board', missionId: mission.id, boardId: randomUUID(), title }],
+        config,
+      )
+    }
+
+    if (entityType === 'task') {
+      const plan = ['读取工作区、任务区与看板上下文']
+      const commands: FormalKanbanCommand[] = []
+      const workspace = resolveWorkspace(snapshot, workspaceTitle, plan, commands)
+      if ('handled' in workspace) return workspace
+      const mission = resolveMission(snapshot, workspace, quotedMission, plan, commands)
+      if ('handled' in mission) return mission
+      const board = resolveBoard(snapshot, mission, quotedBoard, plan, commands)
+      if ('handled' in board) return board
+      return createWritePlan(
+        input,
+        `已整理出创建任务“${title}”的预览。`,
+        [...plan, `创建任务“${title}”`],
+        [...commands, { kind: 'create_task', boardId: board.id, taskId: randomUUID(), title }],
+        config,
+      )
+    }
+
+    if (entityType === 'subtask') {
+      const plan = ['读取工作区、任务区、看板与任务上下文']
+      const commands: FormalKanbanCommand[] = []
+      const workspace = resolveWorkspace(snapshot, workspaceTitle, plan, commands)
+      if ('handled' in workspace) return workspace
+      const mission = resolveMission(snapshot, workspace, quotedMission, plan, commands)
+      if ('handled' in mission) return mission
+      const board = resolveBoard(snapshot, mission, quotedBoard, plan, commands)
+      if ('handled' in board) return board
+      const task = resolveTask(snapshot, board, quotedTask, plan, commands)
+      if ('handled' in task) return task
+      return createWritePlan(
+        input,
+        `已整理出创建子任务“${title}”的预览。`,
+        [...plan, `创建子任务“${title}”`],
+        [...commands, { kind: 'create_subtask', boardId: board.id, taskId: task.id, subTaskId: randomUUID(), title }],
+        config,
+      )
+    }
+
+    if (entityType === 'note') {
+      const plan = ['读取工作区与任务区上下文']
+      const commands: FormalKanbanCommand[] = []
+      const workspace = resolveWorkspace(snapshot, workspaceTitle, plan, commands)
+      if ('handled' in workspace) return workspace
+      const mission = resolveMission(snapshot, workspace, quotedMission, plan, commands)
+      if ('handled' in mission) return mission
+      const noteId = randomUUID()
+      return createWritePlan(
+        input,
+        `已整理出创建笔记“${title}”的预览。`,
+        [...plan, `创建笔记“${title}”并写入初始标题块`],
+        [
+          ...commands,
+          { kind: 'create_note', missionId: mission.id, noteId, title },
+          { kind: 'rewrite_note', noteId, blocks: buildInitialNoteBlocks(title, title) },
+        ],
+        config,
+      )
+    }
+
+    return createQuestionResponse('暂不支持该创建类型。', ['等待支持的实体类型'])
   },
   plan: ({ input, snapshot, config }) => {
     const workspaceTitle = extractWorkspaceTitle(input)

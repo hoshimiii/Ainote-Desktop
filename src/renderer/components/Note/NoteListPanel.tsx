@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useKanbanStore } from '../../store'
-import type { CenterTab } from '../../store/kanban'
+import {
+  type CenterTab,
+  selectEffectiveBoardOrder,
+  selectEffectiveBoards,
+  selectEffectiveCenterTab,
+  selectEffectiveCurrentBoardId,
+  selectEffectiveCurrentMissionId,
+  selectEffectiveCurrentNoteId,
+  selectEffectiveMissions,
+  selectEffectiveNotes,
+} from '../../store/kanban'
 import { CreateDialog } from '../items/CreateDialog'
 import { DeleteDialog } from '../items/DeleteDialog'
 import { RenameDialog } from '../items/RenameDialog'
@@ -9,14 +19,14 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { SortableItem } from '../dnd/SortableItem'
 
 export function NoteListPanel() {
-  const currentMissionId = useKanbanStore((s) => s.currentMissionId)
-  const missions = useKanbanStore((s) => s.missions)
-  const notes = useKanbanStore((s) => s.notes)
-  const boards = useKanbanStore((s) => s.boards)
-  const boardOrder = useKanbanStore((s) => s.boardOrder)
-  const currentNoteId = useKanbanStore((s) => s.currentNoteId)
-  const currentBoardId = useKanbanStore((s) => s.currentBoardId)
-  const centerTab = useKanbanStore((s) => s.centerTab)
+  const currentMissionId = useKanbanStore(selectEffectiveCurrentMissionId)
+  const missions = useKanbanStore(selectEffectiveMissions)
+  const notes = useKanbanStore(selectEffectiveNotes)
+  const boards = useKanbanStore(selectEffectiveBoards)
+  const boardOrder = useKanbanStore(selectEffectiveBoardOrder)
+  const currentNoteId = useKanbanStore(selectEffectiveCurrentNoteId)
+  const currentBoardId = useKanbanStore(selectEffectiveCurrentBoardId)
+  const centerTab = useKanbanStore(selectEffectiveCenterTab)
   const setCenterTab = useKanbanStore((s) => s.setCenterTab)
   const setActiveNote = useKanbanStore((s) => s.setActiveNote)
   const setActiveBoard = useKanbanStore((s) => s.setActiveBoard)

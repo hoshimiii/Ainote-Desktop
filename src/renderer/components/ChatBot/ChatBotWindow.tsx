@@ -44,6 +44,7 @@ function ChatPanel({ onClose, onOpenSettings }: { onClose: () => void; onOpenSet
   const messages = useChatbotStore((s) => s.messages)
   const isStreaming = useChatbotStore((s) => s.isStreaming)
   const sendMessage = useChatbotStore((s) => s.sendMessage)
+  const resolvePreview = useChatbotStore((s) => s.resolvePreview)
   const clearMessages = useChatbotStore((s) => s.clearMessages)
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -101,26 +102,49 @@ function ChatPanel({ onClose, onOpenSettings }: { onClose: () => void; onOpenSet
             关于你的笔记，问我任何问题
           </div>
         )}
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={cn(
-              'mb-3 flex',
-              msg.role === 'user' ? 'justify-end' : 'justify-start',
-            )}
-          >
+        {messages.map((msg) => {
+          const previewAction = msg.previewAction
+
+          return (
             <div
+              key={msg.id}
               className={cn(
-                'max-w-[80%] rounded-2xl px-4 py-2 text-sm',
-                msg.role === 'user'
-                  ? 'bg-primary text-on-primary rounded-br-md'
-                  : 'bg-surface-container-high text-on-surface rounded-bl-md',
+                'mb-3 flex',
+                msg.role === 'user' ? 'justify-end' : 'justify-start',
               )}
             >
-              <div className="whitespace-pre-wrap">{msg.content}</div>
+              <div
+                className={cn(
+                  'max-w-[80%] rounded-2xl px-4 py-2 text-sm',
+                  msg.role === 'user'
+                    ? 'bg-primary text-on-primary rounded-br-md'
+                    : 'bg-surface-container-high text-on-surface rounded-bl-md',
+                )}
+              >
+                <div className="whitespace-pre-wrap">{msg.content}</div>
+                {msg.role === 'assistant' && previewAction && (
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => resolvePreview('confirm', previewAction.pendingPreviewId)}
+                      disabled={isStreaming}
+                    >
+                      保存更改
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => resolvePreview('cancel', previewAction.pendingPreviewId)}
+                      disabled={isStreaming}
+                    >
+                      放弃预览
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
         {isStreaming && (
           <div className="flex justify-start mb-3">
             <div className="bg-surface-container-high text-on-surface-variant rounded-2xl rounded-bl-md px-4 py-2 text-sm">

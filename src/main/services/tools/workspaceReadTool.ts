@@ -1,5 +1,5 @@
 import type { KanbanPersistedState } from '@shared/kanbanPersistence'
-import type { AssistantCapabilityDescriptor } from '../AssistantPlannerModels'
+import type { AssistantCapabilityDescriptor, AssistantToolArguments } from '../AssistantPlannerModels'
 import {
   LIST_INTENT_PATTERN,
   exactMatch,
@@ -32,11 +32,33 @@ function formatWorkspaceMatches(matches: Array<{ id: string; name: string }>) {
   return formatBulletList('工作区匹配结果', matches.map((workspace) => withId(workspace.name, workspace.id)))
 }
 
+function getStringArg(args: AssistantToolArguments, key: string): string | undefined {
+  const value = args[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
 export const workspaceReadTool: AssistantCapabilityDescriptor = {
   id: 'workspace-read',
   kind: 'tool',
   label: '读取工作区',
   description: '读取当前工作区、列出全部工作区，或按名称查询工作区 ID。',
+  readOnly: true,
+  inputSchema: {
+    queryType: {
+      type: 'string',
+      description: '读取类型：current 表示当前工作区，list 表示列出工作区，byName 表示按名称查询。',
+      enum: ['current', 'list', 'byName'],
+      required: true,
+    },
+    workspaceName: {
+      type: 'string',
+      description: '按名称查询时的工作区名称。',
+    },
+    wantsId: {
+      type: 'boolean',
+      description: '是否需要返回工作区 ID。',
+    },
+  },
   match: ({ input }) => {
     if (!WORKSPACE_PATTERN.test(input)) return null
     if (/当前工作区/i.test(input) && (ID_PATTERN.test(input) || /名称|信息/.test(input))) {
@@ -49,6 +71,67 @@ export const workspaceReadTool: AssistantCapabilityDescriptor = {
       return { score: 90, signals: ['workspace-list'] }
     }
     return null
+  },
+  execute: ({ snapshot }, args) => {
+    const queryType = getStringArg(args, 'queryType') ?? 'list'
+    const wantsId = args.wantsId === true
+
+    if (queryType === 'current') {
+      const workspace = getWorkspace(snapshot, snapshot.activeWorkSpaceId)
+      if (!workspace) {
+        return {
+          handled: true,
+          response: '当前没有激活工作区。',
+          plan: ['读取当前工作区上下文'],
+        }
+      }
+      return {
+        handled: true,
+        response: wantsId
+          ? `工作区：${workspace.name}\nid: ${workspace.id}`
+          : `当前工作区：${workspace.name}`,
+        plan: ['通过结构化参数读取当前工作区'],
+      }
+    }
+
+    if (queryType === 'byName') {
+      const workspaceName = getStringArg(args, 'workspaceName')
+      if (!workspaceName) {
+        return {
+          handled: true,
+          response: '请提供要查询的工作区名称。',
+          plan: ['等待工作区名称'],
+        }
+      }
+      const matches = findWorkspaceMatches(snapshot, workspaceName)
+      if (matches.length === 0) {
+        return {
+          handled: true,
+          response: `未找到工作区“${workspaceName}”。`,
+          plan: ['按结构化名称查询工作区'],
+        }
+      }
+      if (matches.length === 1) {
+        return {
+          handled: true,
+          response: wantsId
+            ? `工作区：${matches[0].name}\nid: ${matches[0].id}`
+            : `工作区：${matches[0].name}`,
+          plan: ['按结构化名称读取工作区'],
+        }
+      }
+      return {
+        handled: true,
+        response: formatWorkspaceMatches(matches),
+        plan: ['按结构化名称模糊查询工作区'],
+      }
+    }
+
+    return {
+      handled: true,
+      response: formatBulletList('工作区', snapshot.workspaces.map((workspace) => withId(workspace.name, workspace.id))),
+      plan: ['通过结构化参数读取工作区列表'],
+    }
   },
   plan: ({ input, snapshot }) => {
     const workspaceNameForId = extractWorkspaceNameForId(input)

@@ -1,5 +1,18 @@
 import { useState, useCallback } from 'react'
 import { useKanbanStore, useAuthStore } from '../../store'
+import {
+  selectEffectiveActiveWorkspaceId,
+  selectEffectiveBoardOrder,
+  selectEffectiveBoards,
+  selectEffectiveCurrentBoardId,
+  selectEffectiveCurrentMissionId,
+  selectEffectiveCurrentNoteId,
+  selectEffectiveMissionOrder,
+  selectEffectiveMissions,
+  selectEffectiveNotes,
+  selectEffectiveTasks,
+  selectEffectiveWorkspaces,
+} from '../../store/kanban'
 import { MissionSidebar } from '../Mission/MissionSidebar'
 import { NoteListPanel } from '../Note/NoteListPanel'
 import { BoardView } from '../Board/BoardView'
@@ -28,17 +41,18 @@ export type DndItemType = 'mission' | 'board' | 'board-card' | 'task' | 'subtask
  * Houses the single top-level DndContext for all drag-and-drop interactions.
  */
 export function WorkPage() {
-  const activeWorkSpaceId = useKanbanStore((s) => s.activeWorkSpaceId)
-  const workspace = useKanbanStore((s) => s.workspaces.find((w) => w.id === activeWorkSpaceId))
-  const currentMissionId = useKanbanStore((s) => s.currentMissionId)
-  const currentNoteId = useKanbanStore((s) => s.currentNoteId)
-  const currentBoardId = useKanbanStore((s) => s.currentBoardId)
-  const missions = useKanbanStore((s) => s.missions)
-  const boards = useKanbanStore((s) => s.boards)
-  const tasks = useKanbanStore((s) => s.tasks)
-  const notes = useKanbanStore((s) => s.notes)
-  const boardOrder = useKanbanStore((s) => s.boardOrder)
-  const missionOrder = useKanbanStore((s) => s.missionOrder)
+  const activeWorkSpaceId = useKanbanStore(selectEffectiveActiveWorkspaceId)
+  const workspaces = useKanbanStore(selectEffectiveWorkspaces)
+  const workspace = workspaces.find((w) => w.id === activeWorkSpaceId)
+  const currentMissionId = useKanbanStore(selectEffectiveCurrentMissionId)
+  const currentNoteId = useKanbanStore(selectEffectiveCurrentNoteId)
+  const currentBoardId = useKanbanStore(selectEffectiveCurrentBoardId)
+  const missions = useKanbanStore(selectEffectiveMissions)
+  const boards = useKanbanStore(selectEffectiveBoards)
+  const tasks = useKanbanStore(selectEffectiveTasks)
+  const notes = useKanbanStore(selectEffectiveNotes)
+  const boardOrder = useKanbanStore(selectEffectiveBoardOrder)
+  const missionOrder = useKanbanStore(selectEffectiveMissionOrder)
   const setActiveBoard = useKanbanStore((s) => s.setActiveBoard)
   const setActiveNote = useKanbanStore((s) => s.setActiveNote)
   const createBoard = useKanbanStore((s) => s.createBoard)
@@ -376,11 +390,11 @@ export function WorkPage() {
 
 /** Lightweight overlay shown while dragging */
 function DragOverlayContent({ type, id }: { type: DndItemType; id: string }) {
-  const missions = useKanbanStore((s) => s.missions)
-  const boards = useKanbanStore((s) => s.boards)
-  const tasks = useKanbanStore((s) => s.tasks)
-  const notes = useKanbanStore((s) => s.notes)
-  const currentNoteId = useKanbanStore((s) => s.currentNoteId)
+  const missions = useKanbanStore(selectEffectiveMissions)
+  const boards = useKanbanStore(selectEffectiveBoards)
+  const tasks = useKanbanStore(selectEffectiveTasks)
+  const notes = useKanbanStore(selectEffectiveNotes)
+  const currentNoteId = useKanbanStore(selectEffectiveCurrentNoteId)
 
   let label = id
   let icon = 'drag_indicator'

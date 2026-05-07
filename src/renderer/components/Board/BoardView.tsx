@@ -1,4 +1,12 @@
 import { useKanbanStore } from '../../store'
+import {
+  selectEffectiveBoardOrder,
+  selectEffectiveBoards,
+  selectEffectiveCurrentMissionId,
+  selectEffectiveMissions,
+  selectEffectiveNotes,
+  selectEffectiveTasks,
+} from '../../store/kanban'
 import { CreateDialog } from '../items/CreateDialog'
 import { DeleteDialog } from '../items/DeleteDialog'
 import { RenameDialog } from '../items/RenameDialog'
@@ -14,12 +22,12 @@ import {
 } from './noteNavigation'
 
 export function BoardView() {
-  const currentMissionId = useKanbanStore((s) => s.currentMissionId)
-  const missions = useKanbanStore((s) => s.missions)
-  const boards = useKanbanStore((s) => s.boards)
-  const tasks = useKanbanStore((s) => s.tasks)
-  const notes = useKanbanStore((s) => s.notes)
-  const boardOrder = useKanbanStore((s) => s.boardOrder)
+  const currentMissionId = useKanbanStore(selectEffectiveCurrentMissionId)
+  const missions = useKanbanStore(selectEffectiveMissions)
+  const boards = useKanbanStore(selectEffectiveBoards)
+  const tasks = useKanbanStore(selectEffectiveTasks)
+  const notes = useKanbanStore(selectEffectiveNotes)
+  const boardOrder = useKanbanStore(selectEffectiveBoardOrder)
   const createBoard = useKanbanStore((s) => s.createBoard)
   const deleteBoard = useKanbanStore((s) => s.deleteBoard)
   const renameBoard = useKanbanStore((s) => s.renameBoard)

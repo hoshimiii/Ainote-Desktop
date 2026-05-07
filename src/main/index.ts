@@ -16,6 +16,9 @@ let tray: Tray | null = null
 const isDev = !app.isPackaged
 const MINI_DIALOG_SHORTCUT_SETTINGS_KEY = 'miniDialogShortcutSettings'
 
+const userDataDirName = isDev ? 'AiNote Dev' : 'AiNote'
+app.setPath('userData', path.join(app.getPath('appData'), userDataDirName))
+
 let miniDialogShortcutStatus: MiniDialogShortcutStatus = createMiniDialogShortcutStatus()
 
 // --- Single Instance Lock ---

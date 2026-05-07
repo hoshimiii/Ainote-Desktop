@@ -1,4 +1,11 @@
 import { useKanbanStore } from '../../store'
+import {
+  selectEffectiveBoards,
+  selectEffectiveCurrentMissionId,
+  selectEffectiveCurrentNoteId,
+  selectEffectiveNotes,
+  selectEffectiveTasks,
+} from '../../store/kanban'
 import { Button } from '../ui'
 import { DeleteDialog } from '../items/DeleteDialog'
 import { RenameDialog } from '../items/RenameDialog'
@@ -13,12 +20,12 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '../ui'
 
 export function NoteView() {
-  const currentMissionId = useKanbanStore((s) => s.currentMissionId)
-  const currentNoteId = useKanbanStore((s) => s.currentNoteId)
+  const currentMissionId = useKanbanStore(selectEffectiveCurrentMissionId)
+  const currentNoteId = useKanbanStore(selectEffectiveCurrentNoteId)
   const activeNoteTargetBlockId = useKanbanStore((s) => s.activeNoteTargetBlockId)
-  const notes = useKanbanStore((s) => s.notes)
-  const boards = useKanbanStore((s) => s.boards)
-  const tasks = useKanbanStore((s) => s.tasks)
+  const notes = useKanbanStore(selectEffectiveNotes)
+  const boards = useKanbanStore(selectEffectiveBoards)
+  const tasks = useKanbanStore(selectEffectiveTasks)
   const setActiveNote = useKanbanStore((s) => s.setActiveNote)
   const setActiveBoard = useKanbanStore((s) => s.setActiveBoard)
   const deleteNote = useKanbanStore((s) => s.deleteNote)

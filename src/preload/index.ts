@@ -147,6 +147,8 @@ const electronAPI = {
       ipcRenderer.invoke('kanban:contracts') as Promise<FormalToolContract[]>,
     planAndSolve: (input: string, config?: Partial<LLMConfig>) =>
       ipcRenderer.invoke('kanban:plan-solve', input, config) as Promise<PlanAndSolveResponse>,
+    resolvePreview: (action: 'confirm' | 'cancel', pendingPreviewId: string, config?: Partial<LLMConfig>) =>
+      ipcRenderer.invoke('kanban:preview-resolve', action, pendingPreviewId, config) as Promise<PlanAndSolveResponse>,
   },
 
   // --- Bot Config (dedicated immediate-write persistence, bypasses Zustand debounce) ---

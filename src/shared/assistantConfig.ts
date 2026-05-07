@@ -126,15 +126,27 @@ export function normalizeLLMConfig(config?: Partial<LLMConfig> | null): LLMConfi
   }
 }
 
+export function normalizeLlmFallbackConfig(config?: Partial<LLMConfig> | null): LLMConfig {
+  const normalized = normalizeLLMConfig(config)
+  return normalizeLLMConfig({
+    ...normalized,
+    workflowPreset: 'chat',
+    enableFormalTools: false,
+  })
+}
+
 export function buildAssistantSystemPrompt(config: LLMConfig): string {
   const normalized = normalizeLLMConfig(config)
+  const formalToolsActive = normalized.workflowPreset === 'structured' && normalized.enableFormalTools
   const presetInstruction = normalized.workflowPreset === 'structured'
     ? '当前处于结构化工作流模式：优先围绕 workspace / mission / board / task / subtask / note / link 给出步骤化建议。'
     : '当前处于纯聊天模式：以解释、总结和建议为主，避免声称已执行正式写操作。'
-  const toolInstruction = normalized.enableFormalTools
+  const toolInstruction = formalToolsActive
     ? '当系统可用时，你应优先通过正式命令边界来完成结构化写操作。'
-    : '当前 formal tools 已关闭，因此你只能提供建议，不能假装已经执行结构化写入。'
-  const confirmationInstruction = normalized.writeConfirmationMode === 'always'
+    : '当前对话没有可执行的 formal tools 边界，因此你只能提供建议或步骤，不能声称已经执行任何结构化写入。'
+  const confirmationInstruction = !formalToolsActive
+    ? '如果用户需要创建、删除、重命名、重写或链接，你必须说明需要通过应用的结构化工具通道执行，而不是由当前 LLM 回复直接完成。'
+    : normalized.writeConfirmationMode === 'always'
     ? '当前确认策略为：所有写操作先展示计划，等待用户明确确认后再执行。'
     : '当前确认策略为：当上下文明确时可直接执行写操作，但仍要报告执行结果。'
 

@@ -1,4 +1,4 @@
-import type { AssistantCapabilityDescriptor } from '../AssistantPlannerModels'
+import type { AssistantCapabilityDescriptor, AssistantToolArguments } from '../AssistantPlannerModels'
 import {
   RENAME_INTENT_PATTERN,
   createQuestionResponse,
@@ -7,14 +7,90 @@ import {
   normalizeText,
 } from '../AssistantPlannerShared'
 
+function getStringArg(args: AssistantToolArguments, key: string): string | undefined {
+  const value = args[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
 export const renameEntitiesTool: AssistantCapabilityDescriptor = {
   id: 'rename-entities',
   kind: 'tool',
   label: '重命名实体',
   description: '为工作区、任务区、看板、任务、子任务和笔记生成重命名计划。',
+  readOnly: false,
+  inputSchema: {
+    entityType: {
+      type: 'string',
+      description: '要重命名的实体类型。',
+      enum: ['workspace', 'mission', 'board', 'task', 'subtask', 'note'],
+      required: true,
+    },
+    from: {
+      type: 'string',
+      description: '当前名称。',
+      required: true,
+    },
+    to: {
+      type: 'string',
+      description: '新名称。',
+      required: true,
+    },
+  },
   match: ({ input }) => RENAME_INTENT_PATTERN.test(input)
     ? { score: 96, signals: ['rename'] }
     : null,
+  execute: ({ input, snapshot, config }, args) => {
+    const entityType = getStringArg(args, 'entityType')
+    const from = getStringArg(args, 'from')
+    const to = getStringArg(args, 'to')
+    if (!entityType || !from || !to) {
+      return createQuestionResponse('请提供要重命名的实体类型、当前名称和新名称。', ['等待结构化重命名参数'])
+    }
+
+    if (entityType === 'workspace') {
+      const workspace = snapshot.workspaces.find((item) => normalizeText(item.name) === normalizeText(from))
+      if (!workspace) return createQuestionResponse(`未找到工作区“${from}”。`, ['按名称查找工作区'])
+      return createWritePlan(input, `已整理出重命名工作区“${from}”为“${to}”的预览。`, [`重命名工作区“${from}”为“${to}”`], [{ kind: 'rename_workspace', workspaceId: workspace.id, newName: to }], config)
+    }
+
+    if (entityType === 'mission') {
+      const mission = Object.values(snapshot.missions).find((item) => normalizeText(item.title) === normalizeText(from))
+      if (!mission) return createQuestionResponse(`未找到任务区“${from}”。`, ['按名称查找任务区'])
+      return createWritePlan(input, `已整理出重命名任务区“${from}”为“${to}”的预览。`, [`重命名任务区“${from}”为“${to}”`], [{ kind: 'rename_mission', missionId: mission.id, newTitle: to }], config)
+    }
+
+    if (entityType === 'board') {
+      const board = Object.values(snapshot.boards).find((item) => normalizeText(item.title) === normalizeText(from))
+      if (!board) return createQuestionResponse(`未找到看板“${from}”。`, ['按名称查找看板'])
+      return createWritePlan(input, `已整理出重命名看板“${from}”为“${to}”的预览。`, [`重命名看板“${from}”为“${to}”`], [{ kind: 'rename_board', boardId: board.id, newTitle: to }], config)
+    }
+
+    if (entityType === 'task') {
+      const task = Object.values(snapshot.tasks).find((item) => normalizeText(item.title) === normalizeText(from))
+      if (!task) return createQuestionResponse(`未找到任务“${from}”。`, ['按名称查找任务'])
+      const board = Object.values(snapshot.boards).find((item) => item.taskIds.includes(task.id))
+      if (!board) return createQuestionResponse(`无法定位任务“${from}”所在看板。`, ['读取任务上下文'])
+      return createWritePlan(input, `已整理出重命名任务“${from}”为“${to}”的预览。`, [`重命名任务“${from}”为“${to}”`], [{ kind: 'rename_task', boardId: board.id, taskId: task.id, newTitle: to }], config)
+    }
+
+    if (entityType === 'subtask') {
+      const task = Object.values(snapshot.tasks).find((item) => item.subtasks.some((subtask) => normalizeText(subtask.title) === normalizeText(from)))
+      const subtask = task?.subtasks.find((item) => normalizeText(item.title) === normalizeText(from))
+      const board = task ? Object.values(snapshot.boards).find((item) => item.taskIds.includes(task.id)) : undefined
+      if (!task || !subtask || !board) return createQuestionResponse(`未找到子任务“${from}”。`, ['按名称查找子任务'])
+      return createWritePlan(input, `已整理出重命名子任务“${from}”为“${to}”的预览。`, [`重命名子任务“${from}”为“${to}”`], [{ kind: 'rename_subtask', boardId: board.id, taskId: task.id, subTaskId: subtask.id, newTitle: to }], config)
+    }
+
+    if (entityType === 'note') {
+      const note = Object.values(snapshot.notes).find((item) => normalizeText(item.title) === normalizeText(from))
+      if (!note) return createQuestionResponse(`未找到笔记“${from}”。`, ['按名称查找笔记'])
+      const mission = Object.values(snapshot.missions).find((item) => item.noteIds.includes(note.id))
+      if (!mission) return createQuestionResponse(`无法定位笔记“${from}”所在任务区。`, ['读取笔记上下文'])
+      return createWritePlan(input, `已整理出重命名笔记“${from}”为“${to}”的预览。`, [`重命名笔记“${from}”为“${to}”`], [{ kind: 'rename_note', missionId: mission.id, noteId: note.id, newTitle: to }], config)
+    }
+
+    return createQuestionResponse('暂不支持该重命名类型。', ['等待支持的实体类型'])
+  },
   plan: ({ input, snapshot, config }) => {
     const workspaceRename = extractRenameTarget(input, '工作区')
     if (workspaceRename) {

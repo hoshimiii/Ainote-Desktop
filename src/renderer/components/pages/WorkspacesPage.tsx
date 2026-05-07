@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useKanbanStore, useAuthStore } from '../../store'
+import { selectEffectiveWorkspaces } from '../../store/kanban'
 import { CreateDialog } from '../items/CreateDialog'
 import { DeleteDialog } from '../items/DeleteDialog'
 import { RenameDialog } from '../items/RenameDialog'
@@ -11,7 +12,7 @@ import { CloudSyncPanel } from '../settings/CloudSyncPanel'
  * Page listing all workspaces. Clicking one enters the WorkPage.
  */
 export function WorkspacesPage() {
-  const workspaces = useKanbanStore((s) => s.workspaces)
+  const workspaces = useKanbanStore(selectEffectiveWorkspaces)
   const createWorkSpace = useKanbanStore((s) => s.createWorkSpace)
   const setWorkSpace = useKanbanStore((s) => s.setWorkSpace)
   const deleteWorkSpace = useKanbanStore((s) => s.deleteWorkSpace)

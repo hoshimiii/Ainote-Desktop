@@ -1,4 +1,4 @@
-import type { AssistantCapabilityDescriptor } from '../AssistantPlannerModels'
+import type { AssistantCapabilityDescriptor, AssistantToolArguments } from '../AssistantPlannerModels'
 import {
   DELETE_INTENT_PATTERN,
   createQuestionResponse,
@@ -7,14 +7,84 @@ import {
   normalizeText,
 } from '../AssistantPlannerShared'
 
+function getStringArg(args: AssistantToolArguments, key: string): string | undefined {
+  const value = args[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
 export const deleteEntitiesTool: AssistantCapabilityDescriptor = {
   id: 'delete-entities',
   kind: 'tool',
   label: '删除实体',
   description: '为工作区、任务区、看板、任务、子任务和笔记生成删除计划。',
+  readOnly: false,
+  inputSchema: {
+    entityType: {
+      type: 'string',
+      description: '要删除的实体类型。',
+      enum: ['workspace', 'mission', 'board', 'task', 'subtask', 'note'],
+      required: true,
+    },
+    title: {
+      type: 'string',
+      description: '要删除的实体名称。',
+      required: true,
+    },
+  },
   match: ({ input }) => DELETE_INTENT_PATTERN.test(input)
     ? { score: 96, signals: ['delete'] }
     : null,
+  execute: ({ input, snapshot, config }, args) => {
+    const entityType = getStringArg(args, 'entityType')
+    const title = getStringArg(args, 'title')
+    if (!entityType || !title) {
+      return createQuestionResponse('请提供要删除的实体类型和名称。', ['等待结构化删除参数'])
+    }
+
+    if (entityType === 'workspace') {
+      const workspace = snapshot.workspaces.find((item) => normalizeText(item.name) === normalizeText(title))
+      if (!workspace) return createQuestionResponse(`未找到工作区“${title}”。`, ['按名称查找工作区'])
+      return createWritePlan(input, `已整理出删除工作区“${title}”的预览。`, [`删除工作区“${title}”及其下属结构`], [{ kind: 'delete_workspace', workspaceId: workspace.id }], config)
+    }
+
+    if (entityType === 'mission') {
+      const mission = Object.values(snapshot.missions).find((item) => normalizeText(item.title) === normalizeText(title))
+      if (!mission) return createQuestionResponse(`未找到任务区“${title}”。`, ['按名称查找任务区'])
+      return createWritePlan(input, `已整理出删除任务区“${title}”的预览。`, [`删除任务区“${title}”及其下属结构`], [{ kind: 'delete_mission', missionId: mission.id }], config)
+    }
+
+    if (entityType === 'board') {
+      const board = Object.values(snapshot.boards).find((item) => normalizeText(item.title) === normalizeText(title))
+      if (!board) return createQuestionResponse(`未找到看板“${title}”。`, ['按名称查找看板'])
+      return createWritePlan(input, `已整理出删除看板“${title}”的预览。`, [`删除看板“${title}”及其任务`], [{ kind: 'delete_board', boardId: board.id }], config)
+    }
+
+    if (entityType === 'task') {
+      const task = Object.values(snapshot.tasks).find((item) => normalizeText(item.title) === normalizeText(title))
+      if (!task) return createQuestionResponse(`未找到任务“${title}”。`, ['按名称查找任务'])
+      const board = Object.values(snapshot.boards).find((item) => item.taskIds.includes(task.id))
+      if (!board) return createQuestionResponse(`无法定位任务“${title}”所在看板。`, ['读取任务上下文'])
+      return createWritePlan(input, `已整理出删除任务“${title}”的预览。`, [`删除任务“${title}”`], [{ kind: 'delete_task', boardId: board.id, taskId: task.id }], config)
+    }
+
+    if (entityType === 'subtask') {
+      const task = Object.values(snapshot.tasks).find((item) => item.subtasks.some((subtask) => normalizeText(subtask.title) === normalizeText(title)))
+      const subtask = task?.subtasks.find((item) => normalizeText(item.title) === normalizeText(title))
+      const board = task ? Object.values(snapshot.boards).find((item) => item.taskIds.includes(task.id)) : undefined
+      if (!task || !subtask || !board) return createQuestionResponse(`未找到子任务“${title}”。`, ['按名称查找子任务'])
+      return createWritePlan(input, `已整理出删除子任务“${title}”的预览。`, [`删除子任务“${title}”`], [{ kind: 'delete_subtask', boardId: board.id, taskId: task.id, subTaskId: subtask.id }], config)
+    }
+
+    if (entityType === 'note') {
+      const note = Object.values(snapshot.notes).find((item) => normalizeText(item.title) === normalizeText(title))
+      if (!note) return createQuestionResponse(`未找到笔记“${title}”。`, ['按名称查找笔记'])
+      const mission = Object.values(snapshot.missions).find((item) => item.noteIds.includes(note.id))
+      if (!mission) return createQuestionResponse(`无法定位笔记“${title}”所在任务区。`, ['读取笔记上下文'])
+      return createWritePlan(input, `已整理出删除笔记“${title}”的预览。`, [`删除笔记“${title}”`], [{ kind: 'delete_note', missionId: mission.id, noteId: note.id }], config)
+    }
+
+    return createQuestionResponse('暂不支持该删除类型。', ['等待支持的实体类型'])
+  },
   plan: ({ input, snapshot, config }) => {
     const workspaceTitle = extractDeleteTarget(input, '工作区')
     if (workspaceTitle) {

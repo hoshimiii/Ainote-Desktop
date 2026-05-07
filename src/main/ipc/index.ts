@@ -17,7 +17,7 @@ import {
   executeDesktopKanbanFormalCommand,
   listFormalToolContracts,
 } from '../services/KanbanFormalService'
-import { runPlanAndSolveAgent } from '../services/PlanAndSolveAgentService'
+import { resolvePendingPreviewAction, runPlanAndSolveAgent } from '../services/PlanAndSolveAgentService'
 
 /** Register all database-related IPC handlers */
 export function registerDbHandlers(): void {
@@ -185,6 +185,10 @@ export function registerKanbanFormalHandlers(): void {
 
   ipcMain.handle('kanban:plan-solve', async (_event, input: string, config) => {
     return runPlanAndSolveAgent(input, config)
+  })
+
+  ipcMain.handle('kanban:preview-resolve', async (_event, action: 'confirm' | 'cancel', pendingPreviewId: string, config) => {
+    return resolvePendingPreviewAction(action, pendingPreviewId, config)
   })
 }
 

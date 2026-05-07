@@ -1,4 +1,5 @@
 import { useKanbanStore, useAuthStore } from './store'
+import { selectEffectiveActiveWorkspaceId } from './store/kanban'
 import { HydrationGate } from './components/HydrationGate'
 import { WorkspacesPage } from './components/pages/WorkspacesPage'
 import { WorkPage } from './components/pages/WorkPage'
@@ -39,7 +40,7 @@ function AppShell() {
 }
 
 function AppContent() {
-  const activeWorkSpaceId = useKanbanStore((s) => s.activeWorkSpaceId)
+  const activeWorkSpaceId = useKanbanStore(selectEffectiveActiveWorkspaceId)
 
   return (
     <>

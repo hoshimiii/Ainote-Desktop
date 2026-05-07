@@ -1,5 +1,11 @@
 import { useState } from 'react'
 import { useKanbanStore } from '../../store'
+import {
+  selectEffectiveActiveWorkspaceId,
+  selectEffectiveMissionOrder,
+  selectEffectiveMissions,
+  selectEffectiveWorkspaces,
+} from '../../store/kanban'
 import { orderOwnedIds } from '@shared/orderedIds'
 import { CreateDialog } from '../items/CreateDialog'
 import { DeleteDialog } from '../items/DeleteDialog'
@@ -9,10 +15,11 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { SortableItem } from '../dnd/SortableItem'
 
 export function MissionSidebar() {
-  const activeWorkSpaceId = useKanbanStore((s) => s.activeWorkSpaceId)
-  const workspace = useKanbanStore((s) => s.workspaces.find((w) => w.id === activeWorkSpaceId))
-  const missions = useKanbanStore((s) => s.missions)
-  const missionOrder = useKanbanStore((s) => s.missionOrder)
+  const activeWorkSpaceId = useKanbanStore(selectEffectiveActiveWorkspaceId)
+  const workspaces = useKanbanStore(selectEffectiveWorkspaces)
+  const workspace = workspaces.find((w) => w.id === activeWorkSpaceId)
+  const missions = useKanbanStore(selectEffectiveMissions)
+  const missionOrder = useKanbanStore(selectEffectiveMissionOrder)
   const currentMissionId = useKanbanStore((s) => s.currentMissionId)
   const setMission = useKanbanStore((s) => s.setMission)
   const createMission = useKanbanStore((s) => s.createMission)

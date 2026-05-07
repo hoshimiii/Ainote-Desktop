@@ -1,7 +1,11 @@
 import { create } from 'zustand'
 import { attachSqlitePersist } from './sqlitePersist'
 import { orderOwnedIds } from '@shared/orderedIds'
-import { pickPersistedKanbanState, restorePersistedKanbanStateWithRecovery } from '@shared/kanbanPersistence'
+import {
+  pickPersistedKanbanState,
+  restorePersistedKanbanStateWithRecovery,
+  type KanbanPersistedState,
+} from '@shared/kanbanPersistence'
 import type {
   WorkSpace,
   Mission,
@@ -43,6 +47,16 @@ export type MissionSnapshot = {
   noteIds: string[]
 }
 
+export type KanbanPreviewStatus = 'previewing' | 'committing'
+
+export type KanbanPreviewSession = {
+  pendingPreviewId: string
+  snapshot: KanbanPersistedState
+  summary: string
+  status: KanbanPreviewStatus
+  baseSnapshotFingerprint?: string | null
+}
+
 // --- Store Interface ---
 
 export type CenterTab = 'notes' | 'boards'
@@ -56,6 +70,7 @@ export interface KanbanStore {
   currentBoardId: string | null
   centerTab: CenterTab
   previewMissionId: string | null
+  previewSession: KanbanPreviewSession | null
   rehydrationError: string | null
   transientRecoveryActive: boolean
   transientRecoveryMessage: string | null
@@ -113,6 +128,9 @@ export interface KanbanStore {
   toggleMissionPanel: () => void
   toggleListPanel: () => void
   clearRehydrationError: () => void
+  setPreviewSession: (preview: Omit<KanbanPreviewSession, 'status'> & { status?: KanbanPreviewStatus }) => void
+  clearPreviewSession: () => void
+  setPreviewSessionStatus: (status: KanbanPreviewStatus) => void
   applyLoadedSnapshot: (snapshot: Partial<KanbanStore>) => void
   applyTransientRecovery: (snapshot: Partial<KanbanStore>, message: string) => void
   dismissTransientRecovery: () => void
@@ -140,6 +158,31 @@ export interface KanbanStore {
   getCurrentContext: () => CurrentContextSnapshot
 }
 
+function updatePreviewSnapshot(
+  previewSession: KanbanPreviewSession | null,
+  updater: (snapshot: KanbanPersistedState) => KanbanPersistedState,
+): KanbanPreviewSession | null {
+  if (!previewSession) return null
+  return {
+    ...previewSession,
+    snapshot: updater(previewSession.snapshot),
+  }
+}
+
+export const selectEffectiveWorkspaces = (state: KanbanStore) => state.previewSession?.snapshot.workspaces ?? state.workspaces
+export const selectEffectiveActiveWorkspaceId = (state: KanbanStore) => state.previewSession?.snapshot.activeWorkSpaceId ?? state.activeWorkSpaceId
+export const selectEffectiveCurrentMissionId = (state: KanbanStore) => state.previewSession?.snapshot.currentMissionId ?? state.currentMissionId
+export const selectEffectiveCurrentNoteId = (state: KanbanStore) => state.previewSession?.snapshot.currentNoteId ?? state.currentNoteId
+export const selectEffectiveCurrentBoardId = (state: KanbanStore) => state.previewSession?.snapshot.currentBoardId ?? state.currentBoardId
+export const selectEffectiveCenterTab = (state: KanbanStore) => state.previewSession?.snapshot.centerTab ?? state.centerTab
+export const selectEffectivePreviewMissionId = (state: KanbanStore) => state.previewSession?.snapshot.previewMissionId ?? state.previewMissionId
+export const selectEffectiveMissions = (state: KanbanStore) => state.previewSession?.snapshot.missions ?? state.missions
+export const selectEffectiveBoards = (state: KanbanStore) => state.previewSession?.snapshot.boards ?? state.boards
+export const selectEffectiveTasks = (state: KanbanStore) => state.previewSession?.snapshot.tasks ?? state.tasks
+export const selectEffectiveNotes = (state: KanbanStore) => state.previewSession?.snapshot.notes ?? state.notes
+export const selectEffectiveMissionOrder = (state: KanbanStore) => state.previewSession?.snapshot.missionOrder ?? state.missionOrder
+export const selectEffectiveBoardOrder = (state: KanbanStore) => state.previewSession?.snapshot.boardOrder ?? state.boardOrder
+
 const getBlockPreview = (content: string) => {
   const text = content.replace(/\s+/g, ' ').trim()
   return text.length > 80 ? text.slice(0, 80) : text
@@ -155,6 +198,7 @@ export const useKanbanStore = create<KanbanStore>()(
       currentBoardId: null,
       centerTab: 'boards' as CenterTab,
       previewMissionId: null,
+      previewSession: null,
       rehydrationError: null,
       transientRecoveryActive: false,
       transientRecoveryMessage: null,
@@ -175,13 +219,29 @@ export const useKanbanStore = create<KanbanStore>()(
         set((s) => ({ workspaces: [...s.workspaces, ws] }))
       },
       setWorkSpace: (id) => {
-        set({
-          activeWorkSpaceId: id,
-          currentMissionId: null,
-          currentNoteId: null,
-          activeNoteTargetBlockId: null,
-          currentBoardId: null,
-          previewMissionId: null,
+        set((s) => {
+          if (s.previewSession) {
+            return {
+              previewSession: updatePreviewSnapshot(s.previewSession, (snapshot) => ({
+                ...snapshot,
+                activeWorkSpaceId: id,
+                currentMissionId: null,
+                currentNoteId: null,
+                currentBoardId: null,
+                previewMissionId: null,
+              })),
+              activeNoteTargetBlockId: null,
+            }
+          }
+
+          return {
+            activeWorkSpaceId: id,
+            currentMissionId: null,
+            currentNoteId: null,
+            activeNoteTargetBlockId: null,
+            currentBoardId: null,
+            previewMissionId: null,
+          }
         })
       },
       deleteWorkSpace: (id) => {
@@ -236,7 +296,22 @@ export const useKanbanStore = create<KanbanStore>()(
         })
       },
       setMission: (id) => {
-        set({ currentMissionId: id, currentNoteId: null, activeNoteTargetBlockId: null, currentBoardId: null, previewMissionId: null })
+        set((s) => {
+          if (s.previewSession) {
+            return {
+              previewSession: updatePreviewSnapshot(s.previewSession, (snapshot) => ({
+                ...snapshot,
+                currentMissionId: id,
+                currentNoteId: null,
+                currentBoardId: null,
+                previewMissionId: null,
+              })),
+              activeNoteTargetBlockId: null,
+            }
+          }
+
+          return { currentMissionId: id, currentNoteId: null, activeNoteTargetBlockId: null, currentBoardId: null, previewMissionId: null }
+        })
       },
       setPreviewMission: (id) => {
         set({ previewMissionId: id })
@@ -452,10 +527,29 @@ export const useKanbanStore = create<KanbanStore>()(
       clearRehydrationError: () => {
         set({ rehydrationError: null })
       },
+      setPreviewSession: (preview) => {
+        set({
+          previewSession: {
+            ...preview,
+            status: preview.status ?? 'previewing',
+          },
+        })
+      },
+      clearPreviewSession: () => {
+        set({ previewSession: null })
+      },
+      setPreviewSessionStatus: (status) => {
+        set((s) => ({
+          previewSession: s.previewSession
+            ? { ...s.previewSession, status }
+            : s.previewSession,
+        }))
+      },
       applyLoadedSnapshot: (snapshot) => {
         set({
           ...snapshot,
           activeNoteTargetBlockId: null,
+          previewSession: null,
           rehydrationError: null,
         })
       },
@@ -463,6 +557,7 @@ export const useKanbanStore = create<KanbanStore>()(
         set({
           ...snapshot,
           activeNoteTargetBlockId: null,
+          previewSession: null,
           rehydrationError: null,
           transientRecoveryActive: true,
           transientRecoveryMessage: message,
@@ -474,10 +569,34 @@ export const useKanbanStore = create<KanbanStore>()(
 
       // --- Navigation ---
       setCenterTab: (tab) => {
-        set({ centerTab: tab })
+        set((s) => {
+          if (s.previewSession) {
+            return {
+              previewSession: updatePreviewSnapshot(s.previewSession, (snapshot) => ({
+                ...snapshot,
+                centerTab: tab,
+              })),
+            }
+          }
+
+          return { centerTab: tab }
+        })
       },
       setActiveBoard: (boardId) => {
-        set({ currentBoardId: boardId, currentNoteId: null, activeNoteTargetBlockId: null })
+        set((s) => {
+          if (s.previewSession) {
+            return {
+              previewSession: updatePreviewSnapshot(s.previewSession, (snapshot) => ({
+                ...snapshot,
+                currentBoardId: boardId,
+                currentNoteId: null,
+              })),
+              activeNoteTargetBlockId: null,
+            }
+          }
+
+          return { currentBoardId: boardId, currentNoteId: null, activeNoteTargetBlockId: null }
+        })
       },
       clearActiveNoteTargetBlock: () => {
         set({ activeNoteTargetBlockId: null })
@@ -497,12 +616,27 @@ export const useKanbanStore = create<KanbanStore>()(
         }))
       },
       setActiveNote: (missionId, noteId, blockId) => {
-        set({
-          currentMissionId: missionId,
-          currentNoteId: noteId,
-          activeNoteTargetBlockId: noteId ? (blockId ?? null) : null,
-          currentBoardId: null,
-          previewMissionId: null,
+        set((s) => {
+          if (s.previewSession) {
+            return {
+              previewSession: updatePreviewSnapshot(s.previewSession, (snapshot) => ({
+                ...snapshot,
+                currentMissionId: missionId,
+                currentNoteId: noteId,
+                currentBoardId: null,
+                previewMissionId: null,
+              })),
+              activeNoteTargetBlockId: noteId ? (blockId ?? null) : null,
+            }
+          }
+
+          return {
+            currentMissionId: missionId,
+            currentNoteId: noteId,
+            activeNoteTargetBlockId: noteId ? (blockId ?? null) : null,
+            currentBoardId: null,
+            previewMissionId: null,
+          }
         })
       },
       deleteNote: (missionId, noteId) => {
@@ -601,16 +735,21 @@ export const useKanbanStore = create<KanbanStore>()(
       // --- Snapshots ---
       getCurrentContext: () => {
         const s = get()
-        const mission = s.currentMissionId ? s.missions[s.currentMissionId] : null
-        const note = s.currentNoteId ? s.notes[s.currentNoteId] : null
+        const currentMissionId = selectEffectiveCurrentMissionId(s)
+        const currentNoteId = selectEffectiveCurrentNoteId(s)
+        const missions = selectEffectiveMissions(s)
+        const notes = selectEffectiveNotes(s)
+        const previewMissionId = selectEffectivePreviewMissionId(s)
+        const mission = currentMissionId ? missions[currentMissionId] : null
+        const note = currentNoteId ? notes[currentNoteId] : null
         return {
-          activeWorkSpaceId: s.activeWorkSpaceId,
-          currentMissionId: s.currentMissionId,
+          activeWorkSpaceId: selectEffectiveActiveWorkspaceId(s),
+          currentMissionId,
           currentMissionTitle: mission?.title ?? null,
-          currentNoteId: s.currentNoteId,
+          currentNoteId,
           currentNoteTitle: note?.title ?? null,
-          previewMissionId: s.previewMissionId,
-          effectiveMissionId: s.previewMissionId ?? s.currentMissionId,
+          previewMissionId,
+          effectiveMissionId: previewMissionId ?? currentMissionId,
         }
       },
     }),

@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildAssistantSystemPrompt, normalizeLLMConfig } from '../src/shared/assistantConfig'
+import {
+  buildAssistantSystemPrompt,
+  normalizeLLMConfig,
+  normalizeLlmFallbackConfig,
+} from '../src/shared/assistantConfig'
 
 test('normalizeLLMConfig backfills workflow-aware assistant defaults', () => {
   const config = normalizeLLMConfig({ model: 'gpt-4.1-mini', usertoken: 'token' })
@@ -29,8 +33,33 @@ test('normalizeLLMConfig keeps moonshot provider defaults instead of stale OpenA
 })
 
 test('buildAssistantSystemPrompt includes workflow and confirmation instructions', () => {
-  const prompt = buildAssistantSystemPrompt(normalizeLLMConfig({ writeConfirmationMode: 'never', workflowPreset: 'chat' }))
+  const prompt = buildAssistantSystemPrompt(normalizeLLMConfig({ writeConfirmationMode: 'never', workflowPreset: 'structured' }))
 
-  assert.match(prompt, /纯聊天模式/)
+  assert.match(prompt, /结构化工作流模式/)
   assert.match(prompt, /可直接执行写操作/)
+})
+
+test('buildAssistantSystemPrompt never advertises executable tools in chat mode', () => {
+  const prompt = buildAssistantSystemPrompt(normalizeLLMConfig({
+    workflowPreset: 'chat',
+    enableFormalTools: true,
+    writeConfirmationMode: 'never',
+  }))
+
+  assert.match(prompt, /没有可执行的 formal tools 边界/)
+  assert.match(prompt, /不能声称已经执行/)
+  assert.doesNotMatch(prompt, /可直接执行写操作/)
+})
+
+test('normalizeLlmFallbackConfig disables tool execution claims for LLM streaming fallback', () => {
+  const fallback = normalizeLlmFallbackConfig({
+    workflowPreset: 'structured',
+    enableFormalTools: true,
+    writeConfirmationMode: 'never',
+    model: 'moonshot-v1-8k',
+  })
+
+  assert.equal(fallback.workflowPreset, 'chat')
+  assert.equal(fallback.enableFormalTools, false)
+  assert.equal(fallback.writeConfirmationMode, 'never')
 })

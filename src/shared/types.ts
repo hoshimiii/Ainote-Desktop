@@ -84,6 +84,10 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
+  previewAction?: {
+    pendingPreviewId: string
+    summary: string
+  }
 }
 
 export interface MiniDialogShortcutSettings {

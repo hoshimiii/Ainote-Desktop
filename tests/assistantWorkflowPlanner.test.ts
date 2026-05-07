@@ -35,6 +35,7 @@ test('executing a planned task-note flow creates linked structures', async () =>
   )
 
   assert.ok(planned.commandsToExecute)
+  assert.ok(planned.toolCalls?.some((call) => call.toolId === 'task-note-workflow' && call.status === 'handled'))
   const execution = executePlannedCommands(emptySnapshot, planned.commandsToExecute ?? [])
 
   assert.equal(execution.success, true)
